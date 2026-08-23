@@ -83,7 +83,6 @@ if app_pin:
         st.warning("🔒 **Aplikasi Terkunci.** Masukkan PIN Akses yang benar pada sidebar untuk membuka seluruh fitur.")
         st.stop()
     else:
-        # Tombol Logout jika sudah berhasil masuk
         if st.sidebar.button("🔒 Logout / Kunci Aplikasi"):
             st.session_state['authenticated'] = False
             st.session_state.clear()
@@ -136,48 +135,44 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.info("📱 **Akses Lintas Perangkat**\nAplikasi siap dibuka melalui browser di Samsung S26 Ultra maupun TAB Huawei 12x.")
 
-# INSTRUKSI SISTEM DINAMIS
+# ATURAN EMAS SISTEM (GLOBAL MANDATORY RULES)
+COMMON_GOLDEN_RULES = """
+# ATURAN EMAS PENULISAN ILMIAH (UNIVERSAL MANDATORY RULES)
+1. ZERO HALLUCINATION (NOL HALUSINASI): Dilarang keras membuat citasi fiktif, merubah data uji, atau mengarang referensi. Seluruh rujukan wajib nyata.
+2. ATURAN KETAT JUDUL ARTIKEL:
+   - Panjang Judul: MAKSIMAL 12 KATA (lugas, padat, berbobot).
+   - Tanda Baca Terlarang: DILARANG KERAS menggunakan tanda titik dua (:).
+   - Pembersihan Frasa: Buang frasa administratif/seremonial (seperti 'Laporan Pengabdian...', 'Proposal Hibah BIMA...').
+3. KETENTUAN ABSTRAK & KATA KUNCI:
+   - Abstrak: 150 hingga 250 kata dalam 1 paragraf utuh (memuat latar belakang singkat, tujuan, metode, hasil utama, dan implikasi/novelty).
+   - Kata Kunci (Keywords): Terdiri dari 3 hingga 5 kata kunci utama, WAJIB DISUSUN SECARA ALFABETIS (A-Z), dan dipisahkan tanda titik koma (;).
+4. KETENTUAN RUMUSAN MASALAH: Tepat menetapkan 2 Rumusan Masalah dalam bentuk kalimat tanya yang tajam dan fungsional.
+5. KETENTUAN BAB HASIL DAN PEMBAHASAN:
+   - Bab Hasil: Sintesis fenomena/data uji dengan literatur. Sekurang-kurangnya terdapat 3 Sub-Sub Bab Kunci.
+   - Bab Pembahasan: Kontribusi ilmiah sangat unik (Novelty) terkait kepakaran. Sekurang-kurangnya terdapat 3 Sub-Sub Bab Kunci.
+   - Bagian Wajib (Limitation & Future Research): Wajib dicantumkan di akhir Bab Pembahasan untuk membuktikan posisi naskah sebagai extend atau challenge.
+6. LARANGAN STRUKTUR KALIMAT ANTITESIS AI: DILARANG KERAS menggunakan pola kalimat antitesis berulang seperti 'tidak hanya X, tetapi juga Y' atau 'ini bukan hanya... melainkan...'. Gunakan pernyataan langsung, ekspresif, dan alami (human-like).
+7. MAKSIMAL PANJANG NASKAH: Keseluruhan draf naskah maksimal 4.000 kata (sudah termasuk Daftar Pustaka berformat APA Style 7th Edition).
+"""
+
 if domain_mode == "Mode Hukum (Utama)":
-    if "Kepakaran Utama" in sub_discipline:
-        SYSTEM_INSTRUCTION = """
-        # PERAN DAN IDENTITAS SISTEM
-        Anda adalah Asisten Riset Hukum Senior dan Co-Author Akademis yang mendampingi Dosen dan Peneliti Hukum (spesialisasi HAN, Perlindungan Hukum Prosedural, Perbandingan Hukum, dan Filsafat Hukum).
+    SYSTEM_INSTRUCTION = COMMON_GOLDEN_RULES + f"""
+    # PERAN DAN IDENTITAS SISTEM
+    Anda adalah Asisten Riset Hukum Senior dan Co-Author Akademis spesialisasi {sub_discipline}.
 
-        # PRINSIP UTAMA PENULISAN (MANDATORY RULES)
-        1. ZERO HALLUCINATION (Nol Halusinasi): Dilarang keras membuat citasi fiktif atau data palsu. Semua rujukan wajib bersumber dari dokumen yang diberikan.
-        2. GAYA BAHASA & EKSPRESIF: Gunakan bahasa Indonesia akademis-formal yang mengalir, lugas, dan alami (human-like).
-        3. LARANGAN POLA ANTITESIS AI: DILARANG KERAS menggunakan struktur kalimat antitesis berulang seperti "tidak hanya X, tetapi juga Y". Gunakan kalimat langsung dan ekspresif.
-        4. KETENTUAN JUDUL: Judul artikel harus lugas, padat, dan DILARANG KERAS menggunakan tanda titik dua (:).
-        5. FORMAT CITASI WAJIB: APA Style 7th Edition.
-        6. DISIPLIN ILMU: Murni doktrin hukum, teoretis, yuridis normatif/empiris. DILARANG KERAS mengarahkan ke Administrasi Publik atau Pelayanan Publik umum.
-        7. INTEGRASI ADAGIUM & TEORI HUKUM: Sisipkan adagium hukum Latin/azas hukum relevan serta teori hukum utama yang tepat.
-        """
-    else:
-        SYSTEM_INSTRUCTION = f"""
-        # PERAN DAN IDENTITAS SISTEM
-        Anda adalah Asisten Riset Hukum Senior dan Co-Author Akademis spesialisasi {sub_discipline}.
-
-        # PRINSIP UTAMA PENULISAN (MANDATORY RULES)
-        1. ZERO HALLUCINATION (Nol Halusinasi): Dilarang keras membuat citasi fiktif atau data palsu. Semua rujukan wajib bersumber dari dokumen yang diberikan.
-        2. GAYA BAHASA & EKSPRESIF: Gunakan bahasa Indonesia akademis-formal yang mengalir, lugas, murni hukum, dan alami (human-like).
-        3. LARANGAN POLA ANTITESIS AI: DILARANG KERAS menggunakan struktur kalimat antitesis berulang seperti "tidak hanya X, tetapi juga Y".
-        4. KETENTUAN JUDUL: Judul artikel harus lugas, padat, dan DILARANG KERAS menggunakan tanda titik dua (:).
-        5. FORMAT CITASI WAJIB: APA Style 7th Edition.
-        6. DISIPLIN ILMU: Murni doktrin dan metodologi hukum {sub_discipline}.
-        7. INTEGRASI TEORI HUKUM: Sisipkan asas-asas hukum dan teori hukum utama yang relevan dengan cabang {sub_discipline}.
-        """
+    # KETENTUAN HUKUM SPESIFIK
+    - DISIPLIN ILMU: Murni doktrin hukum, teoretis, yuridis normatif/empiris. DILARANG KERAS mengarahkan ke Administrasi Publik atau Pelayanan Publik umum.
+    - INTEGRASI ADAGIUM & TEORI HUKUM: Sisipkan adagium hukum Latin/azas hukum relevan serta teori hukum utama yang presisi.
+    - FORMAT CITASI WAJIB: APA Style 7th Edition.
+    """
 else:
-    SYSTEM_INSTRUCTION = f"""
+    SYSTEM_INSTRUCTION = COMMON_GOLDEN_RULES + f"""
     # PERAN DAN IDENTITAS SISTEM
     Anda adalah Asisten Riset Multidisiplin Senior dan Co-Author Akademis khusus mendampingi Dosen/Peneliti pada bidang keilmuan: {sub_discipline}.
 
-    # PRINSIP UTAMA PENULISAN (MANDATORY RULES)
-    1. ZERO HALLUCINATION (Nol Halusinasi): Dilarang keras membuat citasi fiktif, merubah, atau mengarang angka data uji/eksperimen.
-    2. AKURASI DATA EKSAKTA / SAMPLING: Jika disediakan data hasil pengujian laboratorium/maket/sampel, gunakan angka dan parameter tersebut secara mutlak tanpa rekayasa. Terjemahkan data teknis tersebut menjadi narasi akademis yang tajam.
-    3. GAYA BAHASA & EKSPRESIF: Gunakan bahasa Indonesia akademis-formal yang mengalir, lugas, dan alami (human-like).
-    4. LARANGAN POLA ANTITESIS AI: DILARANG KERAS menggunakan struktur kalimat antitesis berulang seperti "tidak hanya X, tetapi juga Y".
-    5. KETENTUAN JUDUL: Judul artikel harus lugas, padat, dan DILARANG KERAS menggunakan tanda titik dua (:).
-    6. FORMAT CITASI WAJIB: APA Style 7th Edition.
+    # KETENTUAN MULTIDISIPLIN SPESIFIK
+    - AKURASI DATA EKSAKTA / SAMPLING: Jika disediakan data hasil pengujian laboratorium/maket/sampel, gunakan angka dan parameter tersebut secara mutlak tanpa rekayasa.
+    - FORMAT CITASI WAJIB: APA Style 7th Edition.
     """
 
 # Inisialisasi State Session
@@ -200,8 +195,8 @@ except Exception as e:
 
 # 3. NAVIGASI ALUR KERJA (TABS)
 tab1, tab2, tab3, tab4 = st.tabs([
-    "1️⃣ Fitur 1-2: Sintesis & SOTA", 
-    "2️⃣ Fitur 3-5: Data Riset & Outline", 
+    "1️⃣ Fitur 1-3: Sintesis & SOTA", 
+    "2️⃣ Fitur 4-5: Data Riset & Outline", 
     "3️⃣ Fitur 6-7: Draf Naskah & Ekspor",
     "4️⃣ Asisten Revisi Jurnal (Peer Review)"
 ])
@@ -209,11 +204,18 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # TAB 1: SINTESIS LITERATUR & SOTA
 with tab1:
     st.header("Analisis Literatur & Rekomendasi Judul")
-    mode_input = st.radio("Pilih Metode Input Data:", ["Unggah Berkas PDF (Fitur 1)", "Input Manual Tabel Sintesis (Fitur 2)"])
+    mode_input = st.radio(
+        "Pilih Metode Input Data:", 
+        [
+            "Unggah Berkas PDF Literasi / Rujukan (Fitur 1)", 
+            "Input Manual Tabel Sintesis (Fitur 2)",
+            "Ekstraksi Naskah Proposal & Laporan Riset/Pengabdian (Fitur 3)"
+        ]
+    )
     
-    if mode_input == "Unggah Berkas PDF (Fitur 1)":
-        uploaded_files = st.file_uploader("Unggah Artikel Ilmiah (PDF):", type=["pdf"], accept_multiple_files=True)
-        if st.button("🚀 Ekstrak & Buat Sintesis (3 Rekomendasi)", key="btn_synthesis_pdf"):
+    if mode_input == "Unggah Berkas PDF Literasi / Rujukan (Fitur 1)":
+        uploaded_files = st.file_uploader("Unggah Artikel Ilmiah / Jurnal Rujukan (PDF):", type=["pdf"], accept_multiple_files=True)
+        if st.button("🚀 Ekstrak & Buat Sintesis (3 Rekomendasi Judul)", key="btn_synthesis_pdf"):
             if uploaded_files:
                 with st.spinner("AI sedang mengunggah & mengindeks seluruh berkas PDF ke server..."):
                     try:
@@ -223,10 +225,8 @@ with tab1:
                         for file in uploaded_files:
                             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                                 tmp.write(file.getvalue())
-                                tmp_path = tmp.name
-                                temp_files.append(tmp_path)
-                            
-                            gfile = client.files.upload(file=tmp_path)
+                                temp_files.append(tmp.name)
+                            gfile = client.files.upload(file=tmp.name)
                             uploaded_gemini_files.append(gfile)
                         
                         status_box = st.info("Memastikan seluruh dokumen selesai terindeks secara utuh...")
@@ -236,21 +236,23 @@ with tab1:
                                 gfile = client.files.get(name=gfile.name)
                             if gfile.state.name == "FAILED":
                                 raise Exception(f"Gagal memproses berkas: {gfile.display_name}")
-                        
                         status_box.empty()
                         
-                        with st.spinner("Menganalisis literatur, menyusun 5 SOTA, dan 3 rekomendasi judul..."):
+                        with st.spinner("Menganalisis literatur, menyusun 5 SOTA, dan 3 Rekomendasi Judul (Maks 12 Kata, Tanpa Titik Dua)..."):
                             prompt = SYSTEM_INSTRUCTION + """\n
-                            Tugas: Ekstrak seluruh isi PDF dan hasilkan 3 Rekomendasi Utama dengan variasi metodologi riset yang relevan.
+                            Tugas: Ekstrak seluruh isi PDF rujukan dan hasilkan 3 REKOMENDASI JUDUL UTAMA.
                             
-                            Format Keluaran untuk Setiap Rekomendasi:
-                            - Judul (DILARANG menggunakan tanda titik dua)
+                            Persyaratan Judul:
+                            - MAKSIMAL 12 KATA PER JUDUL.
+                            - DILARANG KERAS MENGGUNAKAN TANDA TITIK DUA (:).
+                            
+                            Format Keluaran Setiap Rekomendasi:
+                            - Judul (Maksimal 12 kata, tanpa tanda titik dua)
                             - Metodologi / Pendekatan Riset
-                            - Gap Research (Analisis mendalam celah penelitian dari dokumen yang diunggah)
+                            - Gap Research (Analisis mendalam celah penelitian)
                             - 5 SOTA (Kutipan/sintesis ilmiah dalam format APA Style 7th Edition)
                             - Novelty (Kontribusi ilmiah paling unik dan berbobot)
                             """
-                            
                             response = client.models.generate_content(
                                 model=selected_model,
                                 contents=[prompt] + uploaded_gemini_files
@@ -260,18 +262,22 @@ with tab1:
                         for path in temp_files:
                             if os.path.exists(path):
                                 os.remove(path)
-                                
                     except Exception as e:
                         st.error(f"Terjadi kesalahan pemrosesan: {e}")
             else:
                 st.warning("Mohon unggah setidaknya 1 file PDF.")
                 
-    else:
+    elif mode_input == "Input Manual Tabel Sintesis (Fitur 2)":
         manual_text = st.text_area("Masukkan tabel/informasi sintesis Anda di sini:", height=200)
         if st.button("🚀 Buat Sintesis dari Input Manual", key="btn_synthesis_manual"):
             if manual_text:
                 with st.spinner("Memproses sintesis manual..."):
-                    prompt = SYSTEM_INSTRUCTION + f"\nSintesiskan informasi manual berikut menjadi 3 Rekomendasi Utama:\n{manual_text}"
+                    prompt = SYSTEM_INSTRUCTION + f"""\n
+                    Tugas: Sintesiskan informasi manual berikut menjadi 3 REKOMENDASI JUDUL UTAMA.
+                    - Masing-masing judul MAKSIMAL 12 KATA dan DILARANG KERAS menggunakan tanda titik dua (:).
+                    - Lengkapi dengan Gap Research, 5 SOTA (APA 7th), dan Novelty.
+                    \nData Input:\n{manual_text}
+                    """
                     response = client.models.generate_content(
                         model=selected_model,
                         contents=prompt
@@ -280,9 +286,65 @@ with tab1:
             else:
                 st.warning("Mohon isi teks sintesis terlebih dahulu.")
 
+    else: # Fitur 3: Ekstraksi Naskah Proposal & Laporan Riset/Pengabdian
+        st.subheader("📄 Ekstraksi Naskah Proposal & Laporan Riset/Pengabdian")
+        doc_type = st.radio(
+            "Pilih Jenis Dokumen yang Diunggah:",
+            ["Proposal Penelitian (e.g. Hibah BIMA / DIPA)", "Laporan Pengabdian kepada Masyarakat (PkM)"]
+        )
+        prop_file = st.file_uploader("Unggah Berkas Proposal / Laporan (PDF):", type=["pdf"], key="uploader_prop")
+        
+        if st.button("🚀 Ekstrak & Buat Sintesis (4 Opsi Judul)", key="btn_synthesis_prop"):
+            if prop_file:
+                with st.spinner("AI sedang mengunggah & menganalisis berkas proposal/laporan..."):
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                            tmp.write(prop_file.getvalue())
+                            tmp_path = tmp.name
+                        
+                        gfile = client.files.upload(file=tmp_path)
+                        while gfile.state.name == "PROCESSING":
+                            time.sleep(2)
+                            gfile = client.files.get(name=gfile.name)
+                        
+                        with st.spinner("Mengekstrak substansi, menyusun 5 SOTA, dan 4 Opsi Judul Jurnal..."):
+                            prompt_prop = SYSTEM_INSTRUCTION + f"""\n
+                            Tugas: Ekstrak seluruh isi dokumen ({doc_type}) dan hasilkan 4 OPSI REKOMENDASI JUDUL ARTIKEL JURNAL.
+
+                            PERSYARATAN KETAT UNTUK SEMUA JUDUL:
+                            1. MAKSIMAL 12 KATA PER JUDUL.
+                            2. DILARANG KERAS MENGGUNAKAN TANDA TITIK DUA (:).
+                            3. HAPUS SELURUH FRASA ADMINISTRATIF / SEREMONIAL.
+
+                            PEMBAGIAN 4 OPSI JUDUL:
+                            - OPSI 1 (Judul Asli Refined): Dipoles dari judul asli dokumen agar memenuhi standar jurnal bereputasi (maksimal 12 kata, tanpa titik dua).
+                            - OPSI 2 (Variasi Tematik A): Penekanan pada sudut pandang yuridis/doktrinal atau substansi utama.
+                            - OPSI 3 (Variasi Tematik B): Penekanan pada sudut pandang efektivitas prosedural, instrumen perlindungan, atau dampak pelaksanaan.
+                            - OPSI 4 (Variasi Tematik C): Penekanan pada sudut pandang filsafat hukum, asas hukum, atau perbandingan.
+
+                            FORMAT KELUARAN UNTUK SETIAP OPSI JUDUL:
+                            - Judul Artikel (Maksimal 12 kata, tanpa titik dua)
+                            - Metodologi / Pendekatan Riset
+                            - Gap Research / Analisis Dampak Permasalahan
+                            - 5 SOTA Rujukan Pendukung (APA Style 7th Edition)
+                            - Novelty (Kontribusi ilmiah paling unik)
+                            """
+                            response = client.models.generate_content(
+                                model=selected_model,
+                                contents=[prompt_prop, gfile]
+                            )
+                            st.session_state['synthesis_result'] = response.text
+                        
+                        if os.path.exists(tmp_path):
+                            os.remove(tmp_path)
+                    except Exception as e:
+                        st.error(f"Gagal memproses dokumen: {e}")
+            else:
+                st.warning("Mohon unggah berkas PDF proposal/laporan terlebih dahulu.")
+
     if st.session_state['synthesis_result']:
         st.markdown("---")
-        st.subheader("📊 Hasil Matriks Sintesis & 3 Rekomendasi Utama")
+        st.subheader("📊 Hasil Matriks Sintesis & Rekomendasi Judul")
         st.markdown(st.session_state['synthesis_result'])
 
 # TAB 2: DATA RISET & OUTLINE
@@ -292,10 +354,11 @@ with tab2:
     if not st.session_state['synthesis_result']:
         st.info("Silakan selesaikan Tahap 1 (Sintesis & SOTA) terlebih dahulu.")
     else:
-        opsi_judul = st.selectbox("Pilih Rekomendasi yang Ingin Dilanjutkan:", [
-            "Rekomendasi 1",
-            "Rekomendasi 2",
-            "Rekomendasi 3"
+        opsi_judul = st.selectbox("Pilih Opsi Rekomendasi Judul yang Ingin Dilanjutkan:", [
+            "Opsi / Rekomendasi 1",
+            "Opsi / Rekomendasi 2",
+            "Opsi / Rekomendasi 3",
+            "Opsi / Rekomendasi 4 (Khusus Fitur 3)"
         ])
         
         if "Eksakta" in data_type_mode:
@@ -307,7 +370,7 @@ with tab2:
             )
         else:
             data_input_field = st.text_area(
-                "Masukkan Data Lapangan / Data Empiris / Hasil Wawancara / Dokumen Riset (Opsional):",
+                "Masukkan Data Lapangan / Data Empiris / Hasil Wawancara / Dokumen Riset Tambahan (Opsional):",
                 height=150,
                 placeholder="Contoh: Hasil wawancara, data statistik kasus, dokumen pemeriksaan..."
             )
@@ -318,21 +381,21 @@ with tab2:
                 Berdasarkan sintesis sebelumnya:
                 {st.session_state['synthesis_result']}
                 
-                Opsi Pilihan: {opsi_judul}
-                Data Riset Utama (Empiris/Eksakta/Uji Sampling): {data_input_field if data_input_field else 'Tidak ada (Pendekatan Teoretis/Kualitatif)'}
+                Pilihan Pengguna: {opsi_judul}
+                Data Tambahan: {data_input_field if data_input_field else 'Tidak ada (Pendekatan Teoretis/Kualitatif)'}
                 
-                Tugas: Hasilkan Outline Naskah Terstruktur dengan kerangka baku:
-                - Judul (Tanpa tanda titik dua)
-                - Abstrak
-                - Kata Kunci (3 kata kunci utama)
-                - A. Pendahuluan (Sertakan fenomena, gap research, SOTA, novelty, teori utama, dan 2 rumusan masalah)
-                - B. Metode Penelitian
+                Tugas: Hasilkan Outline Naskah Terstruktur yang WAJIB MEMATUHI ATURAN AKADEMIS berikut:
+                - Judul: Maksimal 12 kata, TANPA tanda titik dua (:).
+                - Abstrak: Draf kerangka abstrak 150 - 250 kata dalam 1 paragraf utuh.
+                - Kata Kunci (Keywords): 3 hingga 5 kata kunci utama, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
+                - A. Pendahuluan (Sertakan fenomena, gap research, SOTA, novelty, teori utama, dan TEPAT 2 Rumusan Masalah bentuk kalimat tanya).
+                - B. Metode Penelitian (Jenis penelitian & skala wilayah).
                 - C. Hasil dan Pembahasan:
-                    * Sub-Bab Hasil: Sekurang-kurangnya 3 sub-sub bab sintesis data uji/fenomena dengan literatur.
-                    * Sub-Bab Pembahasan: Sekurang-kurangnya 3 sub-sub bab kontribusi ilmiah (novelty).
-                    * Bagian Limitation & Future Research.
-                - D. Kesimpulan
-                - E. Daftar Pustaka (APA 7th Edition)
+                    * Sub-Bab Hasil: Sekurang-kurangnya 3 Sub-Sub Bab Kunci.
+                    * Sub-Bab Pembahasan: Sekurang-kurangnya 3 Sub-Sub Bab Kunci (Novelty).
+                    * Bagian Wajib: Limitation & Future Research.
+                - D. Kesimpulan (Menjawab 2 rumusan masalah secara langsung).
+                - E. Daftar Pustaka (APA Style 7th Edition, Zero Hallucination).
                 """
                 response = client.models.generate_content(
                     model=selected_model,
@@ -347,10 +410,10 @@ with tab2:
         
         st.markdown("---")
         st.subheader("💬 Ruang Diskusi & Revisi Outline")
-        revisi_input = st.text_input("Catatan Revisi Outline (opsional):", placeholder="Misal: Penjelasannya tolong lebih menonjolkan hasil uji sampel B...")
+        revisi_input = st.text_input("Catatan Revisi Outline (opsional):", placeholder="Misal: Penjelasannya tolong lebih menonjolkan analisis asas kepastian hukum...")
         if st.button("🔄 Perbarui Outline Sesuai Catatan"):
             with st.spinner("Memperbarui outline..."):
-                prompt_revisi = f"Berikut outline saat ini:\n{st.session_state['outline_result']}\n\nPermintaan Revisi Pengguna:\n{revisi_input}\n\nTolong perbarui outline tersebut."
+                prompt_revisi = f"Berikut outline saat ini:\n{st.session_state['outline_result']}\n\nPermintaan Revisi Pengguna:\n{revisi_input}\n\nTolong perbarui outline tersebut dengan tetap mematuhi seluruh Aturan Emas."
                 response = client.models.generate_content(
                     model=selected_model,
                     contents=prompt_revisi
@@ -367,22 +430,25 @@ with tab3:
     else:
         st.success("Outline telah disetujui. Siap membuat draf naskah maksimal 4.000 kata.")
         if st.button("✍️ Generasi Draf Naskah Lengkap (Maksimal 4.000 Kata)"):
-            with st.spinner("AI sedang menyusun naskah akademik formal (Zero Hallucination & APA 7th)..."):
+            with st.spinner("AI sedang menyusun naskah akademik formal (Zero Hallucination, APA 7th, Anti-AI Detector)..."):
                 prompt_draft = SYSTEM_INSTRUCTION + f"""\n
                 Susun naskah artikel ilmiah lengkap secara utuh dan terstruktur berdasarkan Outline berikut:
                 {st.session_state['outline_result']}
                 
-                Ketentuan Wajib Penulisan:
-                - Panjang naskah hingga maksimal 4.000 kata secara komprehensif.
-                - Bahasa akademis-formal yang mengalir, lugas, murni ilmiah, dan alami (human-like).
-                - HINDARI STRUKTUR KALIMAT ANTITESIS ("tidak hanya X tapi Y"). Gunakan kalimat langsung.
-                - Jika terdapat data eksperimen/uji laboratorium/sampling, uraikan parameter angka tersebut secara akurat di Bab Hasil tanpa manipulasi data.
-                - Cantumkan Bab Hasil (3 sub-sub bab) dan Bab Pembahasan (3 sub-sub bab + Limitation & Future Research).
-                - Daftar Pustaka berformat APA Style 7th Edition secara presisi (Zero Hallucination).
+                PETUNJUK KETAT PENULISAN NASKAH LENGKAP:
+                - Judul: Maksimal 12 kata, DILARANG KERAS tanda titik dua (:).
+                - Abstrak: Presisi 150 - 250 kata dalam 1 paragraf utuh.
+                - Kata Kunci (Keywords): 3 - 5 kata kunci, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
+                - Panjang Naskah: Maksimal 4.000 kata komprehensif.
+                - Bahasa Akademis Formal Human-Like.
+                - DILARANG STRUKTUR ANTITESIS ('tidak hanya X tapi Y'). Gunakan pernyataan langsung.
+                - Tepat menjawab 2 Rumusan Masalah.
+                - Bab Hasil (3 Sub-Sub Bab) & Bab Pembahasan (3 Sub-Sub Bab + Limitation & Future Research).
+                - Daftar Pustaka berformat APA Style 7th Edition (Zero Hallucination).
                 """
                 response = client.models.generate_content(
                     model=selected_model,
-                    contents=prompt_draft
+                    contents=[prompt_draft]
                 )
                 st.session_state['draft_result'] = response.text
 
