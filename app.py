@@ -63,13 +63,31 @@ def _add_formatted_text(paragraph, text):
 # 2. PANEL SIDEBAR & PROTEKSI PIN
 st.sidebar.title("⚙️ Pengaturan Sistem")
 
-# Gerbang Proteksi PIN Rahasia
+# Inisialisasi Status Login
+if 'authenticated' not in st.session_state:
+    st.session_state['authenticated'] = False
+
 app_pin = st.secrets.get("APP_PIN", "")
+
+# Logika Verifikasi PIN & Logout
 if app_pin:
-    user_pin = st.sidebar.text_input("Masukkan PIN Akses Aplikasi:", type="password", help="Masukkan kata sandi/PIN akses")
-    if user_pin != app_pin:
+    if not st.session_state['authenticated']:
+        user_pin = st.sidebar.text_input("Masukkan PIN Akses Aplikasi:", type="password", help="Masukkan kata sandi/PIN akses")
+        if user_pin == app_pin:
+            st.session_state['authenticated'] = True
+            st.rerun()
+        elif user_pin != "":
+            st.sidebar.error("❌ PIN yang Anda masukkan salah!")
+            
+    if not st.session_state['authenticated']:
         st.warning("🔒 **Aplikasi Terkunci.** Masukkan PIN Akses yang benar pada sidebar untuk membuka seluruh fitur.")
         st.stop()
+    else:
+        # Tombol Logout jika sudah berhasil masuk
+        if st.sidebar.button("🔒 Logout / Kunci Aplikasi"):
+            st.session_state['authenticated'] = False
+            st.session_state.clear()
+            st.rerun()
 
 # Pembacaan API Key Tersembunyi (Tanpa Tampilan Widget)
 api_key = st.secrets.get("GEMINI_API_KEY", "")
