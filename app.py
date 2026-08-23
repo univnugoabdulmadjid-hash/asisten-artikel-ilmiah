@@ -63,7 +63,7 @@ def _add_formatted_text(paragraph, text):
 # 2. PANEL SIDEBAR & PROTEKSI PIN
 st.sidebar.title("⚙️ Pengaturan Sistem")
 
-# Proteksi PIN Rahasia
+# Gerbang Proteksi PIN Rahasia
 app_pin = st.secrets.get("APP_PIN", "")
 if app_pin:
     user_pin = st.sidebar.text_input("Masukkan PIN Akses Aplikasi:", type="password", help="Masukkan kata sandi/PIN akses")
@@ -71,9 +71,9 @@ if app_pin:
         st.warning("🔒 **Aplikasi Terkunci.** Masukkan PIN Akses yang benar pada sidebar untuk membuka seluruh fitur.")
         st.stop()
 
-# Pembacaan Otomatis API Key dari Secrets
-default_key = st.secrets.get("GEMINI_API_KEY", "")
-api_key = st.sidebar.text_input("Gemini API Key Status:", value=default_key, type="password", help="Terisi otomatis dari Secrets")
+# Pembacaan API Key Tersembunyi (Tanpa Tampilan Widget)
+api_key = st.secrets.get("GEMINI_API_KEY", "")
+
 selected_model = st.sidebar.selectbox(
     "Pilih Model Gemini:",
     ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro", "gemini-1.5-flash"],
@@ -223,7 +223,7 @@ with tab1:
                         
                         with st.spinner("Menganalisis literatur, menyusun 5 SOTA, dan 3 rekomendasi judul..."):
                             prompt = SYSTEM_INSTRUCTION + """\n
-                            Tugas: Ekstrak seluruh isi PDF dan hasilkan 3 Rekomendasi Utama dengan variasi标志 metodologi riset yang relevan.
+                            Tugas: Ekstrak seluruh isi PDF dan hasilkan 3 Rekomendasi Utama dengan variasi metodologi riset yang relevan.
                             
                             Format Keluaran untuk Setiap Rekomendasi:
                             - Judul (DILARANG menggunakan tanda titik dua)
@@ -318,7 +318,7 @@ with tab2:
                 """
                 response = client.models.generate_content(
                     model=selected_model,
-                    contents=prompt_outline
+                    contents=[prompt_outline]
                 )
                 st.session_state['outline_result'] = response.text
 
