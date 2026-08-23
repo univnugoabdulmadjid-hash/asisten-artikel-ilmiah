@@ -60,9 +60,20 @@ def _add_formatted_text(paragraph, text):
         else:
             paragraph.add_run(part)
 
-# 2. PANEL SIDEBAR (PENGATURAN SYSTEM & DOMAIN KEILMUAN)
+# 2. PANEL SIDEBAR & PROTEKSI PIN
 st.sidebar.title("⚙️ Pengaturan Sistem")
-api_key = st.sidebar.text_input("Masukkan Gemini API Key:", type="password", help="Dapatkan dari Google AI Studio")
+
+# Proteksi PIN Rahasia
+app_pin = st.secrets.get("APP_PIN", "")
+if app_pin:
+    user_pin = st.sidebar.text_input("Masukkan PIN Akses Aplikasi:", type="password", help="Masukkan kata sandi/PIN akses")
+    if user_pin != app_pin:
+        st.warning("🔒 **Aplikasi Terkunci.** Masukkan PIN Akses yang benar pada sidebar untuk membuka seluruh fitur.")
+        st.stop()
+
+# Pembacaan Otomatis API Key dari Secrets
+default_key = st.secrets.get("GEMINI_API_KEY", "")
+api_key = st.sidebar.text_input("Gemini API Key Status:", value=default_key, type="password", help="Terisi otomatis dari Secrets")
 selected_model = st.sidebar.selectbox(
     "Pilih Model Gemini:",
     ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro", "gemini-1.5-flash"],
@@ -105,9 +116,9 @@ else:
     )
 
 st.sidebar.markdown("---")
-st.sidebar.info("📱 **Akses Lintas Perangkat**\nAplikasi ini dapat dibuka melalui browser di Samsung S26 Ultra maupun Lenovo Yoga.")
+st.sidebar.info("📱 **Akses Lintas Perangkat**\nAplikasi siap dibuka melalui browser di Samsung S26 Ultra maupun TAB Huawei 12x.")
 
-# LOGIKA INSTRUKSI SISTEM BERDASARKAN BIDANG ILMU
+# INSTRUKSI SISTEM DINAMIS
 if domain_mode == "Mode Hukum (Utama)":
     if "Kepakaran Utama" in sub_discipline:
         SYSTEM_INSTRUCTION = """
@@ -160,7 +171,7 @@ st.title("🏛️ Aplikasi Asisten Penulisan Artikel Ilmiah & Revisi Jurnal")
 st.caption(f"Status Sistem: **{domain_mode}** ({sub_discipline}) | Integrasi Gemini API & Google AI Studio")
 
 if not api_key:
-    st.warning("⚠️ Silakan masukkan **Gemini API Key** Anda pada sidebar sebelah kiri untuk mengaktifkan aplikasi.")
+    st.warning("⚠️ Kunci API belum terdeteksi pada Secrets sistem.")
     st.stop()
 
 try:
@@ -177,9 +188,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "4️⃣ Asisten Revisi Jurnal (Peer Review)"
 ])
 
-# ==========================================
 # TAB 1: SINTESIS LITERATUR & SOTA
-# ==========================================
 with tab1:
     st.header("Analisis Literatur & Rekomendasi Judul")
     mode_input = st.radio("Pilih Metode Input Data:", ["Unggah Berkas PDF (Fitur 1)", "Input Manual Tabel Sintesis (Fitur 2)"])
@@ -214,7 +223,7 @@ with tab1:
                         
                         with st.spinner("Menganalisis literatur, menyusun 5 SOTA, dan 3 rekomendasi judul..."):
                             prompt = SYSTEM_INSTRUCTION + """\n
-                            Tugas: Ekstrak seluruh isi PDF dan hasilkan 3 Rekomendasi Utama dengan variasi metodologi riset yang relevan.
+                            Tugas: Ekstrak seluruh isi PDF dan hasilkan 3 Rekomendasi Utama dengan variasi标志 metodologi riset yang relevan.
                             
                             Format Keluaran untuk Setiap Rekomendasi:
                             - Judul (DILARANG menggunakan tanda titik dua)
@@ -258,9 +267,7 @@ with tab1:
         st.subheader("📊 Hasil Matriks Sintesis & 3 Rekomendasi Utama")
         st.markdown(st.session_state['synthesis_result'])
 
-# ==========================================
 # TAB 2: DATA RISET & OUTLINE
-# ==========================================
 with tab2:
     st.header("Klasifikasi Metodologi & Penyusunan Outline")
     
@@ -273,7 +280,6 @@ with tab2:
             "Rekomendasi 3"
         ])
         
-        # Penyesuaian Kolom Input Data berdasarkan Keilmuan
         if "Eksakta" in data_type_mode:
             st.warning("🧪 **Mode Data Eksakta / Uji Laboratorium Aktif**")
             data_input_field = st.text_area(
@@ -334,9 +340,7 @@ with tab2:
                 st.session_state['outline_result'] = response.text
                 st.rerun()
 
-# ==========================================
 # TAB 3: DRAF NASKAH & EKSPOR DOCX
-# ==========================================
 with tab3:
     st.header("Penulisan Draf Naskah Lengkap & Ekspor")
     
@@ -381,9 +385,7 @@ with tab3:
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
 
-# ==========================================
 # TAB 4: ASISTEN REVISI JURNAL (PEER REVIEW)
-# ==========================================
 with tab4:
     st.header("🛠️ Asisten Pendamping Revisi Artikel & Peer Review")
     st.markdown("Fitur ini membantu menyusun **Matriks Tanggapan Reviewer (*Response to Reviewers*)** dan **Draf Revisi Naskah** secara santun, akademis, dan presisi.")
