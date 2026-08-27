@@ -91,9 +91,10 @@ if app_pin:
 # Pembacaan API Key Tersembunyi (Tanpa Tampilan Widget)
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
+# Model Gemini Resmi & Stabil
 selected_model = st.sidebar.selectbox(
     "Pilih Model Gemini:",
-    ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro", "gemini-1.5-flash"],
+    ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
     index=0
 )
 
