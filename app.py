@@ -60,6 +60,30 @@ def _add_formatted_text(paragraph, text):
         else:
             paragraph.add_run(part)
 
+# HELPER PENYANGGA OTOMATIS (AUTO RETRY & MODEL FALLBACK UNTUK CEGAH ERROR 503/404)
+def generate_content_with_retry(client, primary_model, contents):
+    fallback_sequence = [primary_model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"]
+    models_to_try = list(dict.fromkeys(fallback_sequence))
+    
+    last_error = None
+    for model_name in models_to_try:
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents
+                )
+                return response
+            except Exception as e:
+                last_error = e
+                err_msg = str(e)
+                if "503" in err_msg or "UNAVAILABLE" in err_msg or "429" in err_msg:
+                    time.sleep(2)
+                    continue
+                else:
+                    break
+    raise last_error
+
 # 2. PANEL SIDEBAR & PROTEKSI PIN
 st.sidebar.title("⚙️ Pengaturan Sistem")
 
@@ -91,10 +115,10 @@ if app_pin:
 # Pembacaan API Key Tersembunyi (Tanpa Tampilan Widget)
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-# Model Gemini Resmi & Stabil
+# Model Gemini Utama
 selected_model = st.sidebar.selectbox(
-    "Pilih Model Gemini:",
-    ["gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    "Pilih Model Utama:",
+    ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
     index=0
 )
 
@@ -254,9 +278,10 @@ with tab1:
                             - 5 SOTA (Kutipan/sintesis ilmiah dalam format APA Style 7th Edition)
                             - Novelty (Kontribusi ilmiah paling unik dan berbobot)
                             """
-                            response = client.models.generate_content(
-                                model=selected_model,
-                                contents=[prompt] + uploaded_gemini_files
+                            response = generate_content_with_retry(
+                                client,
+                                selected_model,
+                                [prompt] + uploaded_gemini_files
                             )
                             st.session_state['synthesis_result'] = response.text
                         
@@ -279,9 +304,10 @@ with tab1:
                     - Lengkapi dengan Gap Research, 5 SOTA (APA 7th), dan Novelty.
                     \nData Input:\n{manual_text}
                     """
-                    response = client.models.generate_content(
-                        model=selected_model,
-                        contents=prompt
+                    response = generate_content_with_retry(
+                        client,
+                        selected_model,
+                        prompt
                     )
                     st.session_state['synthesis_result'] = response.text
             else:
@@ -330,9 +356,10 @@ with tab1:
                             - 5 SOTA Rujukan Pendukung (APA Style 7th Edition)
                             - Novelty (Kontribusi ilmiah paling unik)
                             """
-                            response = client.models.generate_content(
-                                model=selected_model,
-                                contents=[prompt_prop, gfile]
+                            response = generate_content_with_retry(
+                                client,
+                                selected_model,
+                                [prompt_prop, gfile]
                             )
                             st.session_state['synthesis_result'] = response.text
                         
@@ -398,9 +425,10 @@ with tab2:
                 - D. Kesimpulan (Menjawab 2 rumusan masalah secara langsung).
                 - E. Daftar Pustaka (APA Style 7th Edition, Zero Hallucination).
                 """
-                response = client.models.generate_content(
-                    model=selected_model,
-                    contents=[prompt_outline]
+                response = generate_content_with_retry(
+                    client,
+                    selected_model,
+                    [prompt_outline]
                 )
                 st.session_state['outline_result'] = response.text
 
@@ -415,9 +443,10 @@ with tab2:
         if st.button("🔄 Perbarui Outline Sesuai Catatan"):
             with st.spinner("Memperbarui outline..."):
                 prompt_revisi = f"Berikut outline saat ini:\n{st.session_state['outline_result']}\n\nPermintaan Revisi Pengguna:\n{revisi_input}\n\nTolong perbarui outline tersebut dengan tetap mematuhi seluruh Aturan Emas."
-                response = client.models.generate_content(
-                    model=selected_model,
-                    contents=prompt_revisi
+                response = generate_content_with_retry(
+                    client,
+                    selected_model,
+                    prompt_revisi
                 )
                 st.session_state['outline_result'] = response.text
                 st.rerun()
@@ -447,9 +476,10 @@ with tab3:
                 - Bab Hasil (3 Sub-Sub Bab) & Bab Pembahasan (3 Sub-Sub Bab + Limitation & Future Research).
                 - Daftar Pustaka berformat APA Style 7th Edition (Zero Hallucination).
                 """
-                response = client.models.generate_content(
-                    model=selected_model,
-                    contents=[prompt_draft]
+                response = generate_content_with_retry(
+                    client,
+                    selected_model,
+                    [prompt_draft]
                 )
                 st.session_state['draft_result'] = response.text
 
@@ -525,9 +555,10 @@ with tab4:
                     Susun ulang naskah artikel yang sudah disempurnakan sesuai seluruh catatan reviewer di atas.
                     """
                     
-                    response_rev = client.models.generate_content(
-                        model=selected_model,
-                        contents=[prompt_rev] + contents_payload
+                    response_rev = generate_content_with_retry(
+                        client,
+                        selected_model,
+                        [prompt_rev] + contents_payload
                     )
                     st.session_state['revision_matrix'] = response_rev.text
                     
@@ -551,9 +582,10 @@ with tab4:
         if st.button("🔄 Perbarui Revisi Sesuai Catatan"):
             with st.spinner("Memperbarui matriks & draf revisi..."):
                 prompt_refine = f"Berikut hasil revisi saat ini:\n{st.session_state['revision_matrix']}\n\nMasukan Tambahan Penulis:\n{revisi_comment}\n\nTolong perbarui matriks dan draf naskah tersebut."
-                response_refine = client.models.generate_content(
-                    model=selected_model,
-                    contents=prompt_refine
+                response_refine = generate_content_with_retry(
+                    client,
+                    selected_model,
+                    prompt_refine
                 )
                 st.session_state['revision_matrix'] = response_refine.text
                 st.rerun()
