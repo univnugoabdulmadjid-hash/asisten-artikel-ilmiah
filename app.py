@@ -4,6 +4,9 @@ import tempfile
 import os
 import re
 import time
+import json
+import urllib.request
+import urllib.parse
 from io import BytesIO
 from docx import Document
 
@@ -60,7 +63,64 @@ def _add_formatted_text(paragraph, text):
         else:
             paragraph.add_run(part)
 
-# HELPER PENYANGGA OTOMATIS (AUTO RETRY & MODEL FALLBACK UNTUK CEGAH ERROR 503/404)
+# HELPER CROSSREF API (PENARIKAN 15-20 SITASI RESMI DENGAN DOI)
+def fetch_crossref_citations(query_topic, limit=20):
+    try:
+        clean_query = re.sub(r'[^\w\s]', '', query_topic)[:150]
+        encoded_query = urllib.parse.quote(clean_query)
+        url = f"https://api.crossref.org/works?query={encoded_query}&rows={limit}&sort=relevance"
+        
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'AsistenRisetAkademis/1.0 (mailto:abdulmadjidpodungge@unugo.ac.id)'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            items = data.get('message', {}).get('items', [])
+            
+            citations = []
+            for item in items:
+                title = item.get('title', [''])[0]
+                authors_raw = item.get('author', [])
+                author_list = []
+                for a in authors_raw:
+                    family = a.get('family', '')
+                    given = a.get('given', '')
+                    if family:
+                        author_list.append(f"{family}, {given[0] if given else ''}.".strip())
+                
+                authors_str = ", ".join(author_list) if author_list else "Anonim"
+                
+                pub_date = item.get('published-print') or item.get('published-online') or {}
+                date_parts = pub_date.get('date-parts', [[None]])[0]
+                year = date_parts[0] if date_parts and date_parts[0] else "n.d."
+                
+                journal = item.get('container-title', [''])[0]
+                volume = item.get('volume', '')
+                issue = item.get('issue', '')
+                doi = item.get('DOI', '')
+                
+                if title and doi:
+                    ref_apa = f"{authors_str} ({year}). {title}. {journal}"
+                    if volume:
+                        ref_apa += f", {volume}"
+                    if issue:
+                        ref_apa += f"({issue})"
+                    ref_apa += f". https://doi.org/{doi}"
+                    
+                    citations.append({
+                        'apa': ref_apa,
+                        'doi': f"https://doi.org/{doi}",
+                        'authors': authors_str,
+                        'year': year,
+                        'title': title
+                    })
+            return citations[:20]
+    except Exception as e:
+        return []
+
+# HELPER PENYANGGA OTOMATIS (AUTO RETRY & MODEL FALLBACK)
 def generate_content_with_retry(client, primary_model, contents):
     fallback_sequence = [primary_model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"]
     models_to_try = list(dict.fromkeys(fallback_sequence))
@@ -87,9 +147,13 @@ def generate_content_with_retry(client, primary_model, contents):
 # 2. PANEL SIDEBAR & PROTEKSI PIN
 st.sidebar.title("⚙️ Pengaturan Sistem")
 
-# Inisialisasi Status Login
+# Inisialisasi Status Login & Session State
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
+
+for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix']:
+    if key not in st.session_state:
+        st.session_state[key] = None
 
 app_pin = st.secrets.get("APP_PIN", "")
 
@@ -112,7 +176,7 @@ if app_pin:
             st.session_state.clear()
             st.rerun()
 
-# Pembacaan API Key Tersembunyi (Tanpa Tampilan Widget)
+# Pembacaan API Key Tersembunyi
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
 # Model Gemini Utama
@@ -121,6 +185,41 @@ selected_model = st.sidebar.selectbox(
     ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
     index=0
 )
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("💾 Manajemen Proyek Riset")
+
+# Fitur Simpan Proyek (.json)
+project_export_data = {
+    'synthesis_result': st.session_state['synthesis_result'],
+    'outline_result': st.session_state['outline_result'],
+    'draft_result': st.session_state['draft_result'],
+    'revision_matrix': st.session_state['revision_matrix']
+}
+json_project_str = json.dumps(project_export_data, indent=2)
+
+st.sidebar.download_button(
+    label="💾 Simpan Sesi Proyek (.json)",
+    data=json_project_str,
+    file_name="Proyek_Riset_Akademis.json",
+    mime="application/json",
+    help="Unduh berkas proyek untuk melanjutkan pekerjaan kapan saja."
+)
+
+# Fitur Muat Proyek (.json)
+uploaded_project = st.sidebar.file_uploader("📂 Muat Sesi Proyek (.json):", type=["json"], key="project_loader")
+if uploaded_project is not None:
+    if st.sidebar.button("📥 Pulihkan Pekerjaan"):
+        try:
+            loaded_data = json.load(uploaded_project)
+            st.session_state['synthesis_result'] = loaded_data.get('synthesis_result')
+            st.session_state['outline_result'] = loaded_data.get('outline_result')
+            st.session_state['draft_result'] = loaded_data.get('draft_result')
+            st.session_state['revision_matrix'] = loaded_data.get('revision_matrix')
+            st.sidebar.success("✅ Proyek berhasil dipulihkan!")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error("Gagal membaca berkas proyek.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎯 Domain Keilmuan Riset")
@@ -163,7 +262,7 @@ st.sidebar.info("📱 **Akses Lintas Perangkat**\nAplikasi siap dibuka melalui b
 # ATURAN EMAS SISTEM (GLOBAL MANDATORY RULES)
 COMMON_GOLDEN_RULES = """
 # ATURAN EMAS PENULISAN ILMIAH (UNIVERSAL MANDATORY RULES)
-1. ZERO HALLUCINATION (NOL HALUSINASI): Dilarang keras membuat citasi fiktif, merubah data uji, atau mengarang referensi. Seluruh rujukan wajib nyata.
+1. ZERO HALLUCINATION (NOL HALUSINASI): Dilarang keras membuat citasi fiktif, merubah data uji, atau mengarang referensi. Seluruh rujukan wajib nyata dan dapat diverifikasi.
 2. ATURAN KETAT JUDUL ARTIKEL:
    - Panjang Judul: MAKSIMAL 12 KATA (lugas, padat, berbobot).
    - Tanda Baca Terlarang: DILARANG KERAS menggunakan tanda titik dua (:).
@@ -177,7 +276,8 @@ COMMON_GOLDEN_RULES = """
    - Bab Pembahasan: Kontribusi ilmiah sangat unik (Novelty) terkait kepakaran. Sekurang-kurangnya terdapat 3 Sub-Sub Bab Kunci.
    - Bagian Wajib (Limitation & Future Research): Wajib dicantumkan di akhir Bab Pembahasan untuk membuktikan posisi naskah sebagai extend atau challenge.
 6. LARANGAN STRUKTUR KALIMAT ANTITESIS AI: DILARANG KERAS menggunakan pola kalimat antitesis berulang seperti 'tidak hanya X, tetapi juga Y' atau 'ini bukan hanya... melainkan...'. Gunakan pernyataan langsung, ekspresif, dan alami (human-like).
-7. MAKSIMAL PANJANG NASKAH: Keseluruhan draf naskah maksimal 4.000 kata (sudah termasuk Daftar Pustaka berformat APA Style 7th Edition).
+7. INTEGRASI CROSSREF API & JUMLAH SITASI: Saat menyusun draf naskah utuh, WAJIB menyerap minimal 15 hingga maksimal 20 referensi resmi Crossref API yang disediakan secara kontekstual pada paragraf yang relevan.
+8. MAKSIMAL PANJANG NASKAH: Keseluruhan draf naskah maksimal 4.000 kata (sudah termasuk Daftar Pustaka berformat APA Style 7th Edition).
 """
 
 if domain_mode == "Mode Hukum (Utama)":
@@ -200,13 +300,8 @@ else:
     - FORMAT CITASI WAJIB: APA Style 7th Edition.
     """
 
-# Inisialisasi State Session
-for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix']:
-    if key not in st.session_state:
-        st.session_state[key] = None
-
 st.title("🏛️ Aplikasi Asisten Penulisan Artikel Ilmiah & Revisi Jurnal")
-st.caption(f"Status Sistem: **{domain_mode}** ({sub_discipline}) | Integrasi Gemini API & Google AI Studio")
+st.caption(f"Status Sistem: **{domain_mode}** ({sub_discipline}) | Integrasi Gemini API & Crossref REST API")
 
 if not api_key:
     st.warning("⚠️ Kunci API belum terdeteksi pada Secrets sistem.")
@@ -218,7 +313,7 @@ except Exception as e:
     st.error(f"Gagal menginisialisasi API Key: {e}")
     st.stop()
 
-# 3. NAVIGASI ALUR KERJA (TABS)
+# 3. NAVIGASI ALUR KERJA SEKUANSIAL (TABS)
 tab1, tab2, tab3, tab4 = st.tabs([
     "1️⃣ Fitur 1-3: Sintesis & SOTA", 
     "2️⃣ Fitur 4-5: Data Riset & Outline", 
@@ -263,7 +358,7 @@ with tab1:
                                 raise Exception(f"Gagal memproses berkas: {gfile.display_name}")
                         status_box.empty()
                         
-                        with st.spinner("Menganalisis literatur, menyusun 5 SOTA, dan 3 Rekomendasi Judul (Maks 12 Kata, Tanpa Titik Dua)..."):
+                        with st.spinner("Menganalisis literatur, menyusun 5 SOTA, dan 3 Rekomendasi Judul..."):
                             prompt = SYSTEM_INSTRUCTION + """\n
                             Tugas: Ekstrak seluruh isi PDF rujukan dan hasilkan 3 REKOMENDASI JUDUL UTAMA.
                             
@@ -380,7 +475,7 @@ with tab2:
     st.header("Klasifikasi Metodologi & Penyusunan Outline")
     
     if not st.session_state['synthesis_result']:
-        st.info("Silakan selesaikan Tahap 1 (Sintesis & SOTA) terlebih dahulu.")
+        st.warning("🔒 **Tahap Terkunci.** Silakan selesaikan Tahap 1 (Sintesis & SOTA) terlebih dahulu.")
     else:
         opsi_judul = st.selectbox("Pilih Opsi Rekomendasi Judul yang Ingin Dilanjutkan:", [
             "Opsi / Rekomendasi 1",
@@ -451,37 +546,51 @@ with tab2:
                 st.session_state['outline_result'] = response.text
                 st.rerun()
 
-# TAB 3: DRAF NASKAH & EKSPOR DOCX
+# TAB 3: DRAF NASKAH & EKSPOR DOCX (INTEGRASI CROSSREF API)
 with tab3:
     st.header("Penulisan Draf Naskah Lengkap & Ekspor")
     
     if not st.session_state['outline_result']:
-        st.info("Silakan setujui Outline pada Tab 2 terlebih dahulu.")
+        st.warning("🔒 **Tahap Terkunci.** Silakan selesaikan dan setujui Outline pada Tab 2 terlebih dahulu.")
     else:
-        st.success("Outline telah disetujui. Siap membuat draf naskah maksimal 4.000 kata.")
+        st.success("Outline telah disetujui. Siap membuat draf naskah dengan pengayaan 15-20 sitasi resmi Crossref API.")
+        
         if st.button("✍️ Generasi Draf Naskah Lengkap (Maksimal 4.000 Kata)"):
-            with st.spinner("AI sedang menyusun naskah akademik formal (Zero Hallucination, APA 7th, Anti-AI Detector)..."):
-                prompt_draft = SYSTEM_INSTRUCTION + f"""\n
-                Susun naskah artikel ilmiah lengkap secara utuh dan terstruktur berdasarkan Outline berikut:
-                {st.session_state['outline_result']}
+            with st.spinner("🔍 Menghubungi Crossref API & menarik 15-20 rujukan artikel resmi (DOI) yang paling relevan dengan topik..."):
+                outline_text = st.session_state['outline_result']
                 
-                PETUNJUK KETAT PENULISAN NASKAH LENGKAP:
-                - Judul: Maksimal 12 kata, DILARANG KERAS tanda titik dua (:).
-                - Abstrak: Presisi 150 - 250 kata dalam 1 paragraf utuh.
-                - Kata Kunci (Keywords): 3 - 5 kata kunci, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
-                - Panjang Naskah: Maksimal 4.000 kata komprehensif.
-                - Bahasa Akademis Formal Human-Like.
-                - DILARANG STRUKTUR ANTITESIS ('tidak hanya X tapi Y'). Gunakan pernyataan langsung.
-                - Tepat menjawab 2 Rumusan Masalah.
-                - Bab Hasil (3 Sub-Sub Bab) & Bab Pembahasan (3 Sub-Sub Bab + Limitation & Future Research).
-                - Daftar Pustaka berformat APA Style 7th Edition (Zero Hallucination).
-                """
-                response = generate_content_with_retry(
-                    client,
-                    selected_model,
-                    [prompt_draft]
-                )
-                st.session_state['draft_result'] = response.text
+                # Tarik 15-20 Sitasi Real-Time dari Crossref API
+                crossref_refs = fetch_crossref_citations(outline_text[:200], limit=20)
+                
+                formatted_crossref_text = "\n".join([f"- {r['apa']}" for r in crossref_refs]) if crossref_refs else "Menggunakan rujukan standar dari dokumen utama."
+                
+                with st.spinner("AI sedang menyusun naskah akademik utuh (Zero Hallucination, APA 7th, Anti-AI Detector)..."):
+                    prompt_draft = SYSTEM_INSTRUCTION + f"""\n
+                    Susun naskah artikel ilmiah lengkap secara utuh dan terstruktur berdasarkan Outline berikut:
+                    {outline_text}
+                    
+                    DAFTAR RUJUKAN RESMI DARI CROSSREF API (WAJIB DISERAP DAN DISITASIKAN SEMENTARA MENULIS KONTEKS):
+                    {formatted_crossref_text}
+                    
+                    PETUNJUK KETAT PENULISAN NASKAH LENGKAP:
+                    1. Judul: Maksimal 12 kata, DILARANG KERAS tanda titik dua (:).
+                    2. Abstrak: Presisi 150 - 250 kata dalam 1 paragraf utuh.
+                    3. Kata Kunci (Keywords): 3 - 5 kata kunci, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
+                    4. Panjang Naskah: Maksimal 4.000 kata komprehensif.
+                    5. PENGGUNAAN SITASI: Diwajibkan menyerap dan menyisipkan minimal 15 hingga maksimal 20 rujukan resmi Crossref API di atas ke dalam paragraf-paragraf yang relevan secara kontekstual (body citation).
+                    6. Bahasa Akademis Formal Human-Like.
+                    7. DILARANG STRUKTUR ANTITESIS ('tidak hanya X tapi Y'). Gunakan pernyataan langsung.
+                    8. Tepat menjawab 2 Rumusan Masalah.
+                    9. Bab Hasil (3 Sub-Sub Bab) & Bab Pembahasan (3 Sub-Sub Bab + Limitation & Future Research).
+                    10. Daftar Pustaka: Cantumkan SELURUH rujukan Crossref API yang disitasi secara utuh berformat APA Style 7th Edition (dilengkapi tautan DOI resmi).
+                    """
+                    
+                    response = generate_content_with_retry(
+                        client,
+                        selected_model,
+                        [prompt_draft]
+                    )
+                    st.session_state['draft_result'] = response.text
 
     if st.session_state['draft_result']:
         st.markdown("---")
