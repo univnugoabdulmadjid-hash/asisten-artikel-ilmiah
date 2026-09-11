@@ -66,6 +66,15 @@ def _add_formatted_text(paragraph, text):
         else:
             paragraph.add_run(part)
 
+# HELPER PEMINDAI BERKAS PROYEK LOKAL (MODEL GLORIOS)
+def get_local_project_files():
+    if os.path.exists(LOCAL_REPO_PATH):
+        try:
+            return [f for f in os.listdir(LOCAL_REPO_PATH) if f.endswith('.json')]
+        except Exception:
+            return []
+    return []
+
 # HELPER CROSSREF API (PENARIKAN 15-20 SITASI RESMI DENGAN DOI)
 def fetch_crossref_citations(query_topic, limit=20):
     try:
@@ -182,7 +191,7 @@ st.sidebar.title("⚙️ Pengaturan Sistem")
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 
-for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'crossref_citations', 'project_name']:
+for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'crossref_citations', 'project_name', 'project_notes']:
     if key not in st.session_state:
         st.session_state[key] = None
 
@@ -218,58 +227,54 @@ selected_model = st.sidebar.selectbox(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("💾 Manajemen Proyek Riset")
 
-# Penamaan Proyek Mandiri
-project_name_input = st.sidebar.text_input("Nama Proyek / Artikel:", value=st.session_state['project_name'] or "Artikel_Hukum_HAN")
-st.session_state['project_name'] = project_name_input
+# ==========================================
+# MANAJEMEN PROYEK ARTIKEL (MODEL GLORIOS)
+# ==========================================
+st.sidebar.subheader("📂 MANAJEMEN PROYEK ARTIKEL")
 
-# Tombol Proyek Baru (Reset Canvas)
-if st.sidebar.button("➕ Mulai Proyek Baru (Bersihkan Sesi)"):
-    for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'crossref_citations', 'project_name']:
+# Tombol Proyek Baru (Reset Sesi)
+if st.sidebar.button("➕ Proyek Baru (Reset Sesi)", help="Bersihkan seluruh data draf saat ini untuk mulai analisis artikel baru"):
+    for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'crossref_citations', 'project_name', 'project_notes']:
         st.session_state[key] = None
     st.sidebar.success("Sesi berhasil dibersihkan. Siap untuk proyek baru!")
     st.rerun()
 
-# Fitur Simpan Proyek (.json)
-project_export_data = {
-    'project_name': st.session_state['project_name'],
-    'synthesis_result': st.session_state['synthesis_result'],
-    'outline_result': st.session_state['outline_result'],
-    'draft_result': st.session_state['draft_result'],
-    'revision_matrix': st.session_state['revision_matrix'],
-    'crossref_citations': st.session_state['crossref_citations']
-}
-json_project_str = json.dumps(project_export_data, indent=2)
+st.sidebar.markdown("---")
 
-clean_proj_filename = re.sub(r'[^\w\s-]', '', st.session_state['project_name']).strip().replace(' ', '_')
+# Daftar Proyek Tersimpan di Folder Lokal (Jika Mode Lokal Aktif)
+local_files = get_local_project_files()
 
-# Deteksi Otomatis Folder Lokal Laptop Yoga
-if os.path.exists(LOCAL_REPO_PATH):
-    if st.sidebar.button("💾 Auto-Save ke Folder Laptop Yoga"):
-        try:
-            target_file_path = os.path.join(LOCAL_REPO_PATH, f"{clean_proj_filename}_Session.json")
-            with open(target_file_path, "w", encoding="utf-8") as f:
-                f.write(json_project_str)
-            st.sidebar.success(f"✅ Otomatis tersimpan di:\n`01_memory_repository_webapp_madjid`")
-        except Exception as e:
-            st.sidebar.error(f"Gagal menyimpan ke folder lokal: {e}")
+if local_files:
+    selected_local_file = st.sidebar.selectbox("📂 Pilih Proyek dari Folder Repository:", ["-- Pilih Proyek --"] + local_files)
+    if selected_local_file != "-- Pilih Proyek --":
+        if st.sidebar.button("📥 Buka Proyek Terpilih"):
+            try:
+                full_path = os.path.join(LOCAL_REPO_PATH, selected_local_file)
+                with open(full_path, "r", encoding="utf-8") as f:
+                    loaded_data = json.load(f)
+                st.session_state['project_name'] = loaded_data.get('project_name')
+                st.session_state['project_notes'] = loaded_data.get('project_notes')
+                st.session_state['synthesis_result'] = loaded_data.get('synthesis_result')
+                st.session_state['outline_result'] = loaded_data.get('outline_result')
+                st.session_state['draft_result'] = loaded_data.get('draft_result')
+                st.session_state['revision_matrix'] = loaded_data.get('revision_matrix')
+                st.session_state['crossref_citations'] = loaded_data.get('crossref_citations')
+                st.sidebar.success(f"✅ Proyek '{selected_local_file}' berhasil dimuat!")
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"Gagal memuat berkas: {e}")
+else:
+    st.sidebar.info("💡 Belum ada proyek tersimpan di folder lokal (atau menggunakan mode Cloud Browser).")
 
-st.sidebar.download_button(
-    label="📥 Unduh Sesi Proyek (.json)",
-    data=json_project_str,
-    file_name=f"{clean_proj_filename}_Session.json",
-    mime="application/json",
-    help="Unduh berkas proyek untuk disimpan di folder lokal Anda."
-)
-
-# Fitur Muat Proyek (.json)
-uploaded_project = st.sidebar.file_uploader("📂 Muat Sesi Proyek (.json):", type=["json"], key="project_loader")
+# Unggah File Manual JSON (Mode Cloud)
+uploaded_project = st.sidebar.file_uploader("📂 Muat Berkas Proyek (.json):", type=["json"], key="project_loader")
 if uploaded_project is not None:
-    if st.sidebar.button("📥 Pulihkan Pekerjaan"):
+    if st.sidebar.button("📥 Pulihkan dari File Upload"):
         try:
             loaded_data = json.load(uploaded_project)
             st.session_state['project_name'] = loaded_data.get('project_name')
+            st.session_state['project_notes'] = loaded_data.get('project_notes')
             st.session_state['synthesis_result'] = loaded_data.get('synthesis_result')
             st.session_state['outline_result'] = loaded_data.get('outline_result')
             st.session_state['draft_result'] = loaded_data.get('draft_result')
@@ -279,6 +284,50 @@ if uploaded_project is not None:
             st.rerun()
         except Exception as e:
             st.sidebar.error("Gagal membaca berkas proyek.")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 💾 Simpan / Update Proyek")
+
+proj_name_val = st.sidebar.text_input("Nama Artikel / ID Proyek (*Wajib):", value=st.session_state['project_name'] or "Draf_Artikel_Hukum_HAN")
+st.session_state['project_name'] = proj_name_val
+
+proj_notes_val = st.sidebar.text_area("Catatan Khusus Penulis (Opsional):", value=st.session_state['project_notes'] or "", placeholder="Misal: Target Jurnal SINTA 2 PJIH, fokus asas kepastian hukum...")
+st.session_state['project_notes'] = proj_notes_val
+
+# Data Payload Proyek
+project_export_data = {
+    'project_name': st.session_state['project_name'],
+    'project_notes': st.session_state['project_notes'],
+    'synthesis_result': st.session_state['synthesis_result'],
+    'outline_result': st.session_state['outline_result'],
+    'draft_result': st.session_state['draft_result'],
+    'revision_matrix': st.session_state['revision_matrix'],
+    'crossref_citations': st.session_state['crossref_citations']
+}
+json_project_str = json.dumps(project_export_data, indent=2)
+clean_proj_filename = re.sub(r'[^\w\s-]', '', st.session_state['project_name']).strip().replace(' ', '_')
+
+# Tombol Simpan Otomatis ke Repository Lokal
+if os.path.exists(LOCAL_REPO_PATH):
+    if st.sidebar.button("💾 Simpan ke Repository Lokal", help="Simpan langsung ke folder 01_memory_repository_webapp_madjid di laptop"):
+        try:
+            target_file_path = os.path.join(LOCAL_REPO_PATH, f"{clean_proj_filename}_Session.json")
+            with open(target_file_path, "w", encoding="utf-8") as f:
+                f.write(json_project_str)
+            st.sidebar.success(f"✅ Proyek berhasil disimpan ke:\n`01_memory_repository_webapp_madjid`")
+            time.sleep(1)
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Gagal menyimpan ke folder lokal: {e}")
+
+# Tombol Unduh File JSON (Mode Cloud / Cadangan)
+st.sidebar.download_button(
+    label="📥 Unduh Sesi Proyek (.json)",
+    data=json_project_str,
+    file_name=f"{clean_proj_filename}_Session.json",
+    mime="application/json",
+    help="Unduh berkas JSON proyek untuk cadangan manual."
+)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎯 Domain Keilmuan Riset")
@@ -359,8 +408,10 @@ else:
     - FORMAT CITASI WAJIB: APA Style 7th Edition.
     """
 
+# INDIKATOR STATS ATAS
+active_proj_display = st.session_state['project_name'] if st.session_state['project_name'] else "Proyek Baru (Unsaved)"
 st.title("🏛️ Aplikasi Asisten Penulisan Artikel Ilmiah & Revisi Jurnal")
-st.caption(f"Status Sistem: **{domain_mode}** ({sub_discipline}) | Proyek: **{st.session_state['project_name']}**")
+st.info(f"📌 **Proyek Aktif:** `{active_proj_display}` | **Status Sistem:** `{domain_mode}` ({sub_discipline})")
 
 if not api_key:
     st.warning("⚠️ Kunci API belum terdeteksi pada Secrets sistem.")
