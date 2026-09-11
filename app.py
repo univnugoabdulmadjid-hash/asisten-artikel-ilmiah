@@ -75,12 +75,15 @@ def get_local_project_files():
             return []
     return []
 
-# HELPER CROSSREF API (PENARIKAN 15-20 SITASI RESMI DENGAN DOI)
-def fetch_crossref_citations(query_topic, limit=20):
+# -------------------------------------------------------------
+# HYBRID CITATION FETCHERS (CROSSREF + OPENALEX + GOOGLE BOOKS)
+# -------------------------------------------------------------
+
+def fetch_crossref_journals(query_topic, limit=20):
     try:
         clean_query = re.sub(r'[^\w\s]', '', query_topic)[:150]
         encoded_query = urllib.parse.quote(clean_query)
-        url = f"https://api.crossref.org/works?query={encoded_query}&rows={limit}&sort=relevance"
+        url = f"https://api.crossref.org/works?query={encoded_query}&filter=type:journal-article&rows={limit}&sort=relevance"
         
         req = urllib.request.Request(
             url,
@@ -122,6 +125,7 @@ def fetch_crossref_citations(query_topic, limit=20):
                     ref_apa += f". https://doi.org/{doi}"
                     
                     citations.append({
+                        'type': 'JOUR',
                         'apa': ref_apa,
                         'doi': doi,
                         'authors': author_list,
@@ -133,18 +137,129 @@ def fetch_crossref_citations(query_topic, limit=20):
                         'issue': issue
                     })
             return citations[:20]
-    except Exception as e:
+    except Exception:
+        return []
+
+def fetch_openalex_books(query_topic, limit=10):
+    try:
+        clean_query = re.sub(r'[^\w\s]', '', query_topic)[:150]
+        encoded_query = urllib.parse.quote(clean_query)
+        url = f"https://api.openalex.org/works?search={encoded_query}&filter=type:book|book-chapter&per_page={limit}"
+        
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'AsistenRisetAkademis/1.0 (mailto:abdulmadjidpodungge@unugo.ac.id)'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            results = data.get('results', [])
+            
+            books = []
+            for item in results:
+                title = item.get('title', '')
+                authorships = item.get('authorships', [])
+                author_list = []
+                for auth in authorships:
+                    name = auth.get('author', {}).get('display_name', '')
+                    if name:
+                        parts = name.split(' ')
+                        family = parts[-1] if len(parts) > 1 else name
+                        given = " ".join(parts[:-1]) if len(parts) > 1 else ""
+                        author_list.append({'family': family, 'given': given, 'formatted': f"{family}, {given[0] if given else ''}.".strip()})
+                
+                authors_str = ", ".join([a['formatted'] for a in author_list]) if author_list else "Anonim"
+                year = item.get('publication_year', 'n.d.')
+                doi_raw = item.get('doi', '')
+                doi = doi_raw.replace('https://doi.org/', '') if doi_raw else ''
+                publisher = item.get('primary_location', {}).get('source', {}).get('display_name', 'Penerbit Akademis')
+                
+                if title:
+                    ref_apa = f"{authors_str} ({year}). *{title}*. {publisher}."
+                    if doi:
+                        ref_apa += f" https://doi.org/{doi}"
+                    
+                    books.append({
+                        'type': 'BOOK',
+                        'apa': ref_apa,
+                        'doi': doi,
+                        'authors': author_list,
+                        'authors_str': authors_str,
+                        'year': year,
+                        'title': title,
+                        'publisher': publisher
+                    })
+            return books
+    except Exception:
+        return []
+
+def fetch_google_books(query_topic, limit=10):
+    try:
+        clean_query = re.sub(r'[^\w\s]', '', query_topic)[:150]
+        encoded_query = urllib.parse.quote(clean_query)
+        url = f"https://www.googleapis.com/books/v1/volumes?q={encoded_query}&maxResults={limit}"
+        
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            items = data.get('items', [])
+            
+            books = []
+            for item in items:
+                vol_info = item.get('volumeInfo', {})
+                title = vol_info.get('title', '')
+                authors_raw = vol_info.get('authors', [])
+                author_list = []
+                for name in authors_raw:
+                    parts = name.split(' ')
+                    family = parts[-1] if len(parts) > 1 else name
+                    given = " ".join(parts[:-1]) if len(parts) > 1 else ""
+                    author_list.append({'family': family, 'given': given, 'formatted': f"{family}, {given[0] if given else ''}.".strip()})
+                
+                authors_str = ", ".join([a['formatted'] for a in author_list]) if author_list else "Anonim"
+                pub_date = vol_info.get('publishedDate', 'n.d.')
+                year = pub_date[:4] if len(pub_date) >= 4 else 'n.d.'
+                publisher = vol_info.get('publisher', 'Penerbit Referensi')
+                
+                industry_ids = vol_info.get('industryIdentifiers', [])
+                isbn = ""
+                for ind in industry_ids:
+                    if ind.get('type') in ['ISBN_13', 'ISBN_10']:
+                        isbn = ind.get('identifier', '')
+                        break
+                
+                if title:
+                    ref_apa = f"{authors_str} ({year}). *{title}*. {publisher}."
+                    if isbn:
+                        ref_apa += f" ISBN: {isbn}."
+                    
+                    books.append({
+                        'type': 'BOOK',
+                        'apa': ref_apa,
+                        'doi': f"ISBN-{isbn}" if isbn else "",
+                        'authors': author_list,
+                        'authors_str': authors_str,
+                        'year': year,
+                        'title': title,
+                        'publisher': publisher
+                    })
+            return books
+    except Exception:
         return []
 
 # HELPER KONVERSI SITASI KE KODE RIS (MENDELEY / ZOTERO)
 def convert_citations_to_ris(citations):
     ris_output = ""
     for item in citations:
-        ris_output += "TY  - JOUR\n"
-        if isinstance(item, dict) and 'title' in item:
-            ris_output += f"TI  - {item.get('title', '')}\n"
+        if isinstance(item, dict):
+            c_type = item.get('type', 'JOUR')
+            ris_output += f"TY  - {c_type}\n"
+            if item.get('title'):
+                ris_output += f"TI  - {item.get('title')}\n"
             if item.get('journal'):
                 ris_output += f"JO  - {item.get('journal')}\n"
+            if item.get('publisher'):
+                ris_output += f"PB  - {item.get('publisher')}\n"
             if item.get('year'):
                 ris_output += f"PY  - {item.get('year')}\n"
             if item.get('volume'):
@@ -157,7 +272,7 @@ def convert_citations_to_ris(citations):
             for auth in item.get('authors', []):
                 if isinstance(auth, dict):
                     ris_output += f"AU  - {auth.get('family', '')}, {auth.get('given', '')}\n"
-        ris_output += "ER  - \n\n"
+            ris_output += "ER  - \n\n"
     return ris_output
 
 # HELPER PENYANGGA OTOMATIS (AUTO RETRY & MODEL FALLBACK)
@@ -191,7 +306,7 @@ st.sidebar.title("⚙️ Pengaturan Sistem")
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 
-for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'crossref_citations', 'project_name', 'project_notes']:
+for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'hybrid_citations', 'project_name', 'project_notes']:
     if key not in st.session_state:
         st.session_state[key] = None
 
@@ -233,18 +348,15 @@ st.sidebar.markdown("---")
 # ==========================================
 st.sidebar.subheader("📂 MANAJEMEN PROYEK ARTIKEL")
 
-# Tombol Proyek Baru (Reset Sesi)
 if st.sidebar.button("➕ Proyek Baru (Reset Sesi)", help="Bersihkan seluruh data draf saat ini untuk mulai analisis artikel baru"):
-    for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'crossref_citations', 'project_name', 'project_notes']:
+    for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'hybrid_citations', 'project_name', 'project_notes']:
         st.session_state[key] = None
     st.sidebar.success("Sesi berhasil dibersihkan. Siap untuk proyek baru!")
     st.rerun()
 
 st.sidebar.markdown("---")
 
-# Daftar Proyek Tersimpan di Folder Lokal (Jika Mode Lokal Aktif)
 local_files = get_local_project_files()
-
 if local_files:
     selected_local_file = st.sidebar.selectbox("📂 Pilih Proyek dari Folder Repository:", ["-- Pilih Proyek --"] + local_files)
     if selected_local_file != "-- Pilih Proyek --":
@@ -259,15 +371,14 @@ if local_files:
                 st.session_state['outline_result'] = loaded_data.get('outline_result')
                 st.session_state['draft_result'] = loaded_data.get('draft_result')
                 st.session_state['revision_matrix'] = loaded_data.get('revision_matrix')
-                st.session_state['crossref_citations'] = loaded_data.get('crossref_citations')
+                st.session_state['hybrid_citations'] = loaded_data.get('hybrid_citations')
                 st.sidebar.success(f"✅ Proyek '{selected_local_file}' berhasil dimuat!")
                 st.rerun()
             except Exception as e:
                 st.sidebar.error(f"Gagal memuat berkas: {e}")
 else:
-    st.sidebar.info("💡 Belum ada proyek tersimpan di folder lokal (atau menggunakan mode Cloud Browser).")
+    st.sidebar.info("💡 Belum ada proyek tersimpan di folder lokal.")
 
-# Unggah File Manual JSON (Mode Cloud)
 uploaded_project = st.sidebar.file_uploader("📂 Muat Berkas Proyek (.json):", type=["json"], key="project_loader")
 if uploaded_project is not None:
     if st.sidebar.button("📥 Pulihkan dari File Upload"):
@@ -279,7 +390,7 @@ if uploaded_project is not None:
             st.session_state['outline_result'] = loaded_data.get('outline_result')
             st.session_state['draft_result'] = loaded_data.get('draft_result')
             st.session_state['revision_matrix'] = loaded_data.get('revision_matrix')
-            st.session_state['crossref_citations'] = loaded_data.get('crossref_citations')
+            st.session_state['hybrid_citations'] = loaded_data.get('hybrid_citations')
             st.sidebar.success("✅ Proyek berhasil dipulihkan!")
             st.rerun()
         except Exception as e:
@@ -294,7 +405,6 @@ st.session_state['project_name'] = proj_name_val
 proj_notes_val = st.sidebar.text_area("Catatan Khusus Penulis (Opsional):", value=st.session_state['project_notes'] or "", placeholder="Misal: Target Jurnal SINTA 2 PJIH, fokus asas kepastian hukum...")
 st.session_state['project_notes'] = proj_notes_val
 
-# Data Payload Proyek
 project_export_data = {
     'project_name': st.session_state['project_name'],
     'project_notes': st.session_state['project_notes'],
@@ -302,14 +412,13 @@ project_export_data = {
     'outline_result': st.session_state['outline_result'],
     'draft_result': st.session_state['draft_result'],
     'revision_matrix': st.session_state['revision_matrix'],
-    'crossref_citations': st.session_state['crossref_citations']
+    'hybrid_citations': st.session_state['hybrid_citations']
 }
 json_project_str = json.dumps(project_export_data, indent=2)
 clean_proj_filename = re.sub(r'[^\w\s-]', '', st.session_state['project_name']).strip().replace(' ', '_')
 
-# Tombol Simpan Otomatis ke Repository Lokal
 if os.path.exists(LOCAL_REPO_PATH):
-    if st.sidebar.button("💾 Simpan ke Repository Lokal", help="Simpan langsung ke folder 01_memory_repository_webapp_madjid di laptop"):
+    if st.sidebar.button("💾 Simpan ke Repository Lokal"):
         try:
             target_file_path = os.path.join(LOCAL_REPO_PATH, f"{clean_proj_filename}_Session.json")
             with open(target_file_path, "w", encoding="utf-8") as f:
@@ -320,7 +429,6 @@ if os.path.exists(LOCAL_REPO_PATH):
         except Exception as e:
             st.sidebar.error(f"Gagal menyimpan ke folder lokal: {e}")
 
-# Tombol Unduh File JSON (Mode Cloud / Cadangan)
 st.sidebar.download_button(
     label="📥 Unduh Sesi Proyek (.json)",
     data=json_project_str,
@@ -370,7 +478,7 @@ st.sidebar.info("📱 **Akses Lintas Perangkat**\nAplikasi siap dibuka melalui b
 # ATURAN EMAS SISTEM (GLOBAL MANDATORY RULES)
 COMMON_GOLDEN_RULES = """
 # ATURAN EMAS PENULISAN ILMIAH (UNIVERSAL MANDATORY RULES)
-1. ZERO HALLUCINATION (NOL HALUSINASI): Dilarang keras membuat citasi fiktif, merubah data uji, atau mengarang referensi. Seluruh rujukan wajib nyata dan dapat diverifikasi.
+1. ZERO HALLUCINATION (NOL HALUSINASI): Dilarang keras membuat citasi fiktif, merubah data uji, atau mengarang referensi. Seluruh rujukan wajib nyata dan memiliki identitas DOI / ISBN / Metadata resmi.
 2. ATURAN KETAT JUDUL ARTIKEL:
    - Panjang Judul: MAKSIMAL 12 KATA (lugas, padat, berbobot).
    - Tanda Baca Terlarang: DILARANG KERAS menggunakan tanda titik dua (:).
@@ -384,7 +492,9 @@ COMMON_GOLDEN_RULES = """
    - Bab Pembahasan: Kontribusi ilmiah sangat unik (Novelty) terkait kepakaran. Sekurang-kurangnya terdapat 3 Sub-Sub Bab Kunci.
    - Bagian Wajib (Limitation & Future Research): Wajib dicantumkan di akhir Bab Pembahasan untuk membuktikan posisi naskah sebagai extend atau challenge.
 6. LARANGAN STRUKTUR KALIMAT ANTITESIS AI: DILARANG KERAS menggunakan pola kalimat antitesis berulang seperti 'tidak hanya X, tetapi juga Y' atau 'ini bukan hanya... melainkan...'. Gunakan pernyataan langsung, ekspresif, dan alami (human-like).
-7. INTEGRASI CROSSREF API & JUMLAH SITASI: Saat menyusun draf naskah utuh, WAJIB menyerap minimal 15 hingga maksimal 20 referensi resmi Crossref API yang disediakan secara kontekstual pada paragraf yang relevan.
+7. KOMPOSISI RUJUKAN HYBRID (BOKS & JURNAL):
+   - Wajib menyerap minimal 8 RUJUKAN BUKU / BOOK CHAPTER / MONOGRAF resmi (ditarik dari OpenAlex / Google Books).
+   - Wajib menyerap minimal 15 hingga 20 ARTIKEL JURNAL resmi (ditarik dari Crossref API / OpenAlex API) yang dilengkapi DOI valid.
 8. MAKSIMAL PANJANG NASKAH: Keseluruhan draf naskah maksimal 4.000 kata (sudah termasuk Daftar Pustaka berformat APA Style 7th Edition).
 """
 
@@ -408,7 +518,6 @@ else:
     - FORMAT CITASI WAJIB: APA Style 7th Edition.
     """
 
-# INDIKATOR STATS ATAS
 active_proj_display = st.session_state['project_name'] if st.session_state['project_name'] else "Proyek Baru (Unsaved)"
 st.title("🏛️ Aplikasi Asisten Penulisan Artikel Ilmiah & Revisi Jurnal")
 st.info(f"📌 **Proyek Aktif:** `{active_proj_display}` | **Status Sistem:** `{domain_mode}` ({sub_discipline})")
@@ -657,52 +766,62 @@ with tab2:
                 st.session_state['outline_result'] = response.text
                 st.rerun()
 
-# TAB 3: DRAF NASKAH & EKSPOR DOCX (INTEGRASI CROSSREF API)
+# TAB 3: DRAF NASKAH & EKSPOR DOCX (HYBRID CITATION SYSTEM)
 with tab3:
     st.header("Penulisan Draf Naskah Lengkap & Ekspor")
     
     if not st.session_state['outline_result']:
         st.warning("🔒 **Tahap Terkunci.** Silakan selesaikan dan setujui Outline pada Tab 2 terlebih dahulu.")
     else:
-        st.success("Outline telah disetujui. Siap membuat draf naskah dengan pengayaan 15-20 sitasi resmi Crossref API.")
+        st.success("Outline disetujui. Siap menyusun draf naskah dengan rujukan Hybrid (>8 Buku/Monograf + 15-20 Jurnal DOI).")
         
         if st.button("✍️ Generasi Draf Naskah Lengkap (Maksimal 4.000 Kata)"):
-            with st.spinner("🔍 Menghubungi Crossref API & menarik 15-20 rujukan artikel resmi (DOI) yang paling relevan dengan topik..."):
-                outline_text = st.session_state['outline_result']
+            outline_text = st.session_state['outline_result']
+            
+            with st.spinner("🔍 Menghubungi Crossref, OpenAlex, dan Google Books API untuk menarik rujukan BUKU & JURNAL mutakhir..."):
+                journals = fetch_crossref_journals(outline_text[:150], limit=20)
+                openalex_bks = fetch_openalex_books(outline_text[:150], limit=5)
+                gbooks = fetch_google_books(outline_text[:150], limit=5)
                 
-                # Tarik 15-20 Sitasi Real-Time dari Crossref API
-                crossref_refs = fetch_crossref_citations(outline_text[:200], limit=20)
-                st.session_state['crossref_citations'] = crossref_refs
+                all_books = openalex_bks + gbooks
+                all_citations = journals + all_books
+                st.session_state['hybrid_citations'] = all_citations
                 
-                formatted_crossref_text = "\n".join([f"- {r['apa']}" for r in crossref_refs]) if crossref_refs else "Menggunakan rujukan standar dari dokumen utama."
+                formatted_refs_str = ""
+                formatted_refs_str += "=== KATEGORI RUJUKAN BUKU / MONOGRAF / BOOK CHAPTER (MINIMAL 8) ===\n"
+                for b in all_books:
+                    formatted_refs_str += f"- [BUKU] {b['apa']}\n"
+                    
+                formatted_refs_str += "\n=== KATEGORI RUJUKAN ARTIKEL JURNAL DOI (MINIMAL 15-20) ===\n"
+                for j in journals:
+                    formatted_refs_str += f"- [JURNAL] {j['apa']}\n"
+
+            with st.spinner("AI sedang menyusun naskah akademik utuh (Zero Hallucination, APA 7th, Anti-AI Detector)..."):
+                prompt_draft = SYSTEM_INSTRUCTION + f"""\n
+                Susun naskah artikel ilmiah lengkap secara utuh dan terstruktur berdasarkan Outline berikut:
+                {outline_text}
                 
-                with st.spinner("AI sedang menyusun naskah akademik utuh (Zero Hallucination, APA 7th, Anti-AI Detector)..."):
-                    prompt_draft = SYSTEM_INSTRUCTION + f"""\n
-                    Susun naskah artikel ilmiah lengkap secara utuh dan terstruktur berdasarkan Outline berikut:
-                    {outline_text}
-                    
-                    DAFTAR RUJUKAN RESMI DARI CROSSREF API (WAJIB DISERAP DAN DISITASIKAN SEMENTARA MENULIS KONTEKS):
-                    {formatted_crossref_text}
-                    
-                    PETUNJUK KETAT PENULISAN NASKAH LENGKAP:
-                    1. Judul: Maksimal 12 kata, DILARANG KERAS tanda titik dua (:).
-                    2. Abstrak: Presisi 150 - 250 kata dalam 1 paragraf utuh.
-                    3. Kata Kunci (Keywords): 3 - 5 kata kunci, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
-                    4. Panjang Naskah: Maksimal 4.000 kata komprehensif.
-                    5. PENGGUNAAN SITASI: Diwajibkan menyerap dan menyisipkan minimal 15 hingga maksimal 20 rujukan resmi Crossref API di atas ke dalam paragraf-paragraf yang relevan secara kontekstual (body citation).
-                    6. Bahasa Akademis Formal Human-Like.
-                    7. DILARANG STRUKTUR ANTITESIS ('tidak hanya X tapi Y'). Gunakan pernyataan langsung.
-                    8. Tepat menjawab 2 Rumusan Masalah.
-                    9. Bab Hasil (3 Sub-Sub Bab) & Bab Pembahasan (3 Sub-Sub Bab + Limitation & Future Research).
-                    10. Daftar Pustaka: Cantumkan SELURUH rujukan Crossref API yang disitasi secara utuh berformat APA Style 7th Edition (dilengkapi tautan DOI resmi).
-                    """
-                    
-                    response = generate_content_with_retry(
-                        client,
-                        selected_model,
-                        [prompt_draft]
-                    )
-                    st.session_state['draft_result'] = response.text
+                DAFTAR RUJUKAN RESMI HYBRID (WAJIB DISERAP SECARA KONTEKSTUAL KE PARAGRAF NASKAH):
+                {formatted_refs_str}
+                
+                PETUNJUK KETAT PENULISAN NASKAH LENGKAP:
+                1. Judul: Maksimal 12 kata, DILARANG KERAS tanda titik dua (:).
+                2. Abstrak: Presisi 150 - 250 kata dalam 1 paragraf utuh.
+                3. Kata Kunci (Keywords): 3 - 5 kata kunci, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
+                4. Panjang Naskah: Maksimal 4.000 kata komprehensif.
+                5. PENGGUNAAN SITASI HYBRID: Wajib menyerap MINIMAL 8 BUKU/MONOGRAF dan 15-20 ARTIKEL JURNAL di atas ke dalam paragraf yang relevan secara kontekstual.
+                6. Bahasa Akademis Formal Human-Like. DILARANG STRUKTUR ANTITESIS ('tidak hanya X tapi Y').
+                7. Tepat menjawab 2 Rumusan Masalah.
+                8. Bab Hasil (3 Sub-Sub Bab) & Bab Pembahasan (3 Sub-Sub Bab + Limitation & Future Research).
+                9. Daftar Pustaka: Cantumkan SELURUH rujukan Buku & Jurnal yang disitasi secara utuh berformat APA Style 7th Edition.
+                """
+                
+                response = generate_content_with_retry(
+                    client,
+                    selected_model,
+                    [prompt_draft]
+                )
+                st.session_state['draft_result'] = response.text
 
     if st.session_state['draft_result']:
         st.markdown("---")
@@ -710,10 +829,24 @@ with tab3:
         st.markdown(st.session_state['draft_result'])
         
         st.markdown("---")
-        st.subheader("📥 Unduh Dokumen")
+        st.subheader("💬 Ruang Diskusi & Penyesuaian Draf Naskah")
+        st.caption("Berikan komentar, koreksi substansi, atau permintaan penambahan sitasi/referensi sebelum mengunduh naskah.")
         
+        draft_comment = st.text_input("Catatan / Komentar Penyesuaian Draf:", placeholder="Misal: Tambahkan analisis perbandingan pada Bab Pembahasan dan perbanyak sitasi buku filsafat...")
+        if st.button("🔄 Perbarui Draf Naskah Sesuai Catatan"):
+            with st.spinner("Memperbarui dan merevisi draf naskah secara akademis..."):
+                prompt_refine_draft = f"""Berikut Draf Naskah saat ini:\n{st.session_state['draft_result']}\n\nCatatan Tambahan Penulis:\n{draft_comment}\n\nTolong perbarui draf naskah tersebut secara komprehensif dengan tetap mematuhi Aturan Emas dan APA 7th Edition."""
+                response_refine_draft = generate_content_with_retry(
+                    client,
+                    selected_model,
+                    prompt_refine_draft
+                )
+                st.session_state['draft_result'] = response_refine_draft.text
+                st.rerun()
+
+        st.markdown("---")
+        st.subheader("📥 Unduh Dokumen Naskah Utuh")
         docx_file = markdown_to_docx(st.session_state['draft_result'])
-        
         st.download_button(
             label="📘 Unduh Naskah (.docx / Microsoft Word)",
             data=docx_file,
@@ -727,7 +860,6 @@ with tab4:
     st.markdown("Fitur ini membantu menyusun **Matriks Tanggapan Reviewer (*Response to Reviewers*)** dan **Draf Revisi Naskah** secara santun, akademis, dan presisi.")
     
     col1, col2 = st.columns(2)
-    
     with col1:
         st.subheader("1. Unggah / Masukkan Naskah Awal")
         manuscript_file = st.file_uploader("Unggah Naskah Asli (PDF):", type=["pdf"], key="uploader_ms")
@@ -824,12 +956,12 @@ with tab4:
 # TAB 5: EKSPOR SITASI RIS (MENDELEY / ZOTERO)
 with tab5:
     st.header("📚 Ekspor Sitasi RIS ke Mendeley / Zotero")
-    st.markdown("Tab ini secara otomatis mengonversi seluruh daftar rujukan artikel dari Crossref API yang digunakan dalam Draf Naskah menjadi berkas **`.ris`** siap pakai.")
+    st.markdown("Tab ini secara otomatis mengonversi seluruh rujukan **Buku, Monograf, dan Artikel Jurnal** dari Crossref, OpenAlex, dan Google Books menjadi berkas **`.ris`** siap pakai.")
     
-    if st.session_state['crossref_citations']:
-        st.success(f"Terdeteksi **{len(st.session_state['crossref_citations'])} rujukan resmi Crossref API** dari draf naskah saat ini.")
+    if st.session_state['hybrid_citations']:
+        st.success(f"Terdeteksi **{len(st.session_state['hybrid_citations'])} rujukan resmi (Buku & Jurnal)** dari draf naskah saat ini.")
         
-        ris_data_string = convert_citations_to_ris(st.session_state['crossref_citations'])
+        ris_data_string = convert_citations_to_ris(st.session_state['hybrid_citations'])
         
         st.subheader("📑 Pratinjau Teks Kode RIS:")
         st.code(ris_data_string[:1000] + ("\n..." if len(ris_data_string) > 1000 else ""), language="text")
@@ -843,4 +975,4 @@ with tab5:
             help="Impor berkas ini ke Mendeley: Add New -> Import Library -> RIS (.ris)"
         )
     else:
-        st.info("💡 Belum ada data sitasi Crossref API. Silakan jalankan tombol **Generasi Draf Naskah Lengkap** di Tab 3 terlebih dahulu.")
+        st.info("💡 Belum ada data sitasi Hybrid. Silakan jalankan tombol **Generasi Draf Naskah Lengkap** di Tab 3 terlebih dahulu.")
