@@ -66,7 +66,7 @@ def _add_formatted_text(paragraph, text):
         else:
             paragraph.add_run(part)
 
-# HELPER PEMINDAI BERKAS PROYEK LOKAL (MODEL GLORIOS)
+# HELPER PEMINDAI BERKAS PROYEK LOKAL
 def get_local_project_files():
     if os.path.exists(LOCAL_REPO_PATH):
         try:
@@ -302,7 +302,6 @@ def generate_content_with_retry(client, primary_model, contents):
 # 2. PANEL SIDEBAR & PROTEKSI PIN
 st.sidebar.title("⚙️ Pengaturan Sistem")
 
-# Inisialisasi Status Login & Session State
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 
@@ -312,7 +311,6 @@ for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matr
 
 app_pin = st.secrets.get("APP_PIN", "")
 
-# Logika Verifikasi PIN & Logout
 if app_pin:
     if not st.session_state['authenticated']:
         user_pin = st.sidebar.text_input("Masukkan PIN Akses Aplikasi:", type="password", help="Masukkan kata sandi/PIN akses")
@@ -331,10 +329,8 @@ if app_pin:
             st.session_state.clear()
             st.rerun()
 
-# Pembacaan API Key Tersembunyi
 api_key = st.secrets.get("GEMINI_API_KEY", "")
 
-# Model Gemini Utama
 selected_model = st.sidebar.selectbox(
     "Pilih Model Utama:",
     ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
@@ -343,9 +339,7 @@ selected_model = st.sidebar.selectbox(
 
 st.sidebar.markdown("---")
 
-# ==========================================
-# MANAJEMEN PROYEK ARTIKEL (MODEL GLORIOS)
-# ==========================================
+# MANAJEMEN PROYEK ARTIKEL
 st.sidebar.subheader("📂 MANAJEMEN PROYEK ARTIKEL")
 
 if st.sidebar.button("➕ Proyek Baru (Reset Sesi)", help="Bersihkan seluruh data draf saat ini untuk mulai analisis artikel baru"):
@@ -492,10 +486,15 @@ COMMON_GOLDEN_RULES = """
    - Bab Pembahasan: Kontribusi ilmiah sangat unik (Novelty) terkait kepakaran. Sekurang-kurangnya terdapat 3 Sub-Sub Bab Kunci.
    - Bagian Wajib (Limitation & Future Research): Wajib dicantumkan di akhir Bab Pembahasan untuk membuktikan posisi naskah sebagai extend atau challenge.
 6. LARANGAN STRUKTUR KALIMAT ANTITESIS AI: DILARANG KERAS menggunakan pola kalimat antitesis berulang seperti 'tidak hanya X, tetapi juga Y' atau 'ini bukan hanya... melainkan...'. Gunakan pernyataan langsung, ekspresif, dan alami (human-like).
-7. KOMPOSISI RUJUKAN HYBRID (BOKS & JURNAL):
-   - Wajib menyerap minimal 8 RUJUKAN BUKU / BOOK CHAPTER / MONOGRAF resmi (ditarik dari OpenAlex / Google Books).
-   - Wajib menyerap minimal 15 hingga 20 ARTIKEL JURNAL resmi (ditarik dari Crossref API / OpenAlex API) yang dilengkapi DOI valid.
-8. MAKSIMAL PANJANG NASKAH: Keseluruhan draf naskah maksimal 4.000 kata (sudah termasuk Daftar Pustaka berformat APA Style 7th Edition).
+7. STRUKTUR DAFTAR PUSTAKA KATEGORIS (AKADEMIK HUKUM BAKU):
+   - Daftar Pustaka WAJIB dipisahkan menjadi 2 KELOMPOK SUB-JUDUL UTAMA:
+     a. Buku / Monograf / Book Chapter
+     b. Jurnal Ilmiah / Artikel Jurnal
+   - Setiap kelompok rujukan WAJIB DISUSUN SECARA ALFABETIS dari A sampai Z (A-Z) berformat APA Style 7th Edition.
+8. KOMPOSISI RUJUKAN HYBRID:
+   - Wajib menyerap minimal 8 RUJUKAN BUKU / BOOK CHAPTER / MONOGRAF resmi.
+   - Wajib menyerap minimal 15 hingga 20 ARTIKEL JURNAL resmi ber-DOI.
+9. MAKSIMAL PANJANG NASKAH: Keseluruhan draf naskah maksimal 4.000 kata (sudah termasuk Daftar Pustaka berformat APA Style 7th Edition).
 """
 
 if domain_mode == "Mode Hukum (Utama)":
@@ -738,7 +737,7 @@ with tab2:
                     * Sub-Bab Pembahasan: Sekurang-kurangnya 3 Sub-Sub Bab Kunci (Novelty).
                     * Bagian Wajib: Limitation & Future Research.
                 - D. Kesimpulan (Menjawab 2 rumusan masalah secara langsung).
-                - E. Daftar Pustaka (APA Style 7th Edition, Zero Hallucination).
+                - E. Daftar Pustaka (Wajib dikelompokkan: Buku A-Z dan Jurnal A-Z berformat APA Style 7th Edition).
                 """
                 response = generate_content_with_retry(
                     client,
@@ -766,14 +765,14 @@ with tab2:
                 st.session_state['outline_result'] = response.text
                 st.rerun()
 
-# TAB 3: DRAF NASKAH & EKSPOR DOCX (HYBRID CITATION SYSTEM)
+# TAB 3: DRAF NASKAH & EKSPOR DOCX (KATEGORISASI DAFTAR PUSTAKA A-Z)
 with tab3:
     st.header("Penulisan Draf Naskah Lengkap & Ekspor")
     
     if not st.session_state['outline_result']:
         st.warning("🔒 **Tahap Terkunci.** Silakan selesaikan dan setujui Outline pada Tab 2 terlebih dahulu.")
     else:
-        st.success("Outline disetujui. Siap menyusun draf naskah dengan rujukan Hybrid (>8 Buku/Monograf + 15-20 Jurnal DOI).")
+        st.success("Outline disetujui. Siap menyusun draf naskah dengan rujukan Hybrid & Daftar Pustaka Kategori A-Z.")
         
         if st.button("✍️ Generasi Draf Naskah Lengkap (Maksimal 4.000 Kata)"):
             outline_text = st.session_state['outline_result']
@@ -804,7 +803,7 @@ with tab3:
                 DAFTAR RUJUKAN RESMI HYBRID (WAJIB DISERAP SECARA KONTEKSTUAL KE PARAGRAF NASKAH):
                 {formatted_refs_str}
                 
-                PETUNJUK KETAT PENULISAN NASKAH LENGKAP:
+                PETUNJUK KETAT PENULISAN NASKAH LENGKAP & DAFTAR PUSTAKA:
                 1. Judul: Maksimal 12 kata, DILARANG KERAS tanda titik dua (:).
                 2. Abstrak: Presisi 150 - 250 kata dalam 1 paragraf utuh.
                 3. Kata Kunci (Keywords): 3 - 5 kata kunci, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
@@ -813,7 +812,15 @@ with tab3:
                 6. Bahasa Akademis Formal Human-Like. DILARANG STRUKTUR ANTITESIS ('tidak hanya X tapi Y').
                 7. Tepat menjawab 2 Rumusan Masalah.
                 8. Bab Hasil (3 Sub-Sub Bab) & Bab Pembahasan (3 Sub-Sub Bab + Limitation & Future Research).
-                9. Daftar Pustaka: Cantumkan SELURUH rujukan Buku & Jurnal yang disitasi secara utuh berformat APA Style 7th Edition.
+                9. FORMAT DAFTAR PUSTAKA WAJIB DIBAGI DUA KELOMPOK DENGAN URUTAN ALFABETIS A-Z:
+                   
+                   E. Daftar Pustaka
+                   
+                   Buku / Monograf / Book Chapter
+                   [Daftar seluruh rujukan buku disajikan secara terurut alfabetis dari A sampai Z, format APA Style 7th]
+                   
+                   Jurnal Ilmiah / Artikel Jurnal
+                   [Daftar seluruh rujukan artikel jurnal disajikan secara terurut alfabetis dari A sampai Z, format APA Style 7th dengan DOI]
                 """
                 
                 response = generate_content_with_retry(
@@ -835,7 +842,7 @@ with tab3:
         draft_comment = st.text_input("Catatan / Komentar Penyesuaian Draf:", placeholder="Misal: Tambahkan analisis perbandingan pada Bab Pembahasan dan perbanyak sitasi buku filsafat...")
         if st.button("🔄 Perbarui Draf Naskah Sesuai Catatan"):
             with st.spinner("Memperbarui dan merevisi draf naskah secara akademis..."):
-                prompt_refine_draft = f"""Berikut Draf Naskah saat ini:\n{st.session_state['draft_result']}\n\nCatatan Tambahan Penulis:\n{draft_comment}\n\nTolong perbarui draf naskah tersebut secara komprehensif dengan tetap mematuhi Aturan Emas dan APA 7th Edition."""
+                prompt_refine_draft = f"""Berikut Draf Naskah saat ini:\n{st.session_state['draft_result']}\n\nCatatan Tambahan Penulis:\n{draft_comment}\n\nTolong perbarui draf naskah tersebut secara komprehensif dengan tetap mematuhi Aturan Emas dan menyusun Daftar Pustaka terpisah (Buku A-Z & Jurnal A-Z) dalam format APA Style 7th Edition."""
                 response_refine_draft = generate_content_with_retry(
                     client,
                     selected_model,
