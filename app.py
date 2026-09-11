@@ -5,6 +5,7 @@ import os
 import re
 import time
 import json
+import datetime
 import urllib.request
 import urllib.parse
 from io import BytesIO
@@ -25,6 +26,10 @@ st.markdown("""
     .stTextArea textarea { font-family: 'Times New Roman', serif; }
     </style>
 """, unsafe_allow_html=True)
+
+# PENETAPAN RENTANG 5 TAHUN TERAKHIR OTOMATIS
+CURRENT_YEAR = datetime.datetime.now().year
+START_YEAR = CURRENT_YEAR - 5
 
 # PATH LOKAL REPOSITORY MEMORI LAPTOP YOGA
 LOCAL_REPO_PATH = r"D:\KAMPUS UNUGO\02. TRIDHARMA PT\01. PUBLIKASI KARYA\01.ARTIKEL\01_memory_repository_webapp_madjid"
@@ -76,14 +81,14 @@ def get_local_project_files():
     return []
 
 # -------------------------------------------------------------
-# HYBRID CITATION FETCHERS (CROSSREF + OPENALEX + GOOGLE BOOKS)
+# HYBRID CITATION FETCHERS (FILTER OTOMATIS 5 TAHUN TERAKHIR)
 # -------------------------------------------------------------
 
 def fetch_crossref_journals(query_topic, limit=20):
     try:
         clean_query = re.sub(r'[^\w\s]', '', query_topic)[:150]
         encoded_query = urllib.parse.quote(clean_query)
-        url = f"https://api.crossref.org/works?query={encoded_query}&filter=type:journal-article&rows={limit}&sort=relevance"
+        url = f"https://api.crossref.org/works?query={encoded_query}&filter=type:journal-article,from-pub-date:{START_YEAR}-01-01&rows={limit}&sort=relevance"
         
         req = urllib.request.Request(
             url,
@@ -144,7 +149,7 @@ def fetch_openalex_books(query_topic, limit=10):
     try:
         clean_query = re.sub(r'[^\w\s]', '', query_topic)[:150]
         encoded_query = urllib.parse.quote(clean_query)
-        url = f"https://api.openalex.org/works?search={encoded_query}&filter=type:book|book-chapter&per_page={limit}"
+        url = f"https://api.openalex.org/works?search={encoded_query}&filter=type:book|book-chapter,publication_year:{START_YEAR}-{CURRENT_YEAR}&per_page={limit}"
         
         req = urllib.request.Request(
             url,
@@ -208,6 +213,12 @@ def fetch_google_books(query_topic, limit=10):
             for item in items:
                 vol_info = item.get('volumeInfo', {})
                 title = vol_info.get('title', '')
+                pub_date = vol_info.get('publishedDate', 'n.d.')
+                year = int(pub_date[:4]) if len(pub_date) >= 4 and pub_date[:4].isdigit() else 0
+                
+                if year < START_YEAR:
+                    continue
+                
                 authors_raw = vol_info.get('authors', [])
                 author_list = []
                 for name in authors_raw:
@@ -217,8 +228,6 @@ def fetch_google_books(query_topic, limit=10):
                     author_list.append({'family': family, 'given': given, 'formatted': f"{family}, {given[0] if given else ''}.".strip()})
                 
                 authors_str = ", ".join([a['formatted'] for a in author_list]) if author_list else "Anonim"
-                pub_date = vol_info.get('publishedDate', 'n.d.')
-                year = pub_date[:4] if len(pub_date) >= 4 else 'n.d.'
                 publisher = vol_info.get('publisher', 'Penerbit Referensi')
                 
                 industry_ids = vol_info.get('industryIdentifiers', [])
@@ -239,7 +248,7 @@ def fetch_google_books(query_topic, limit=10):
                         'doi': f"ISBN-{isbn}" if isbn else "",
                         'authors': author_list,
                         'authors_str': authors_str,
-                        'year': year,
+                        'year': str(year),
                         'title': title,
                         'publisher': publisher
                     })
@@ -247,7 +256,7 @@ def fetch_google_books(query_topic, limit=10):
     except Exception:
         return []
 
-# HELPER KONVERSI SITASI KE KODE RIS (MENDELEY / ZOTERO)
+# HELPER KONVERSI SITASI KE KODE RIS
 def convert_citations_to_ris(citations):
     ris_output = ""
     for item in citations:
@@ -275,7 +284,7 @@ def convert_citations_to_ris(citations):
             ris_output += "ER  - \n\n"
     return ris_output
 
-# HELPER PENYANGGA OTOMATIS (AUTO RETRY & MODEL FALLBACK)
+# HELPER PENYANGGA OTOMATIS
 def generate_content_with_retry(client, primary_model, contents):
     fallback_sequence = [primary_model, "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"]
     models_to_try = list(dict.fromkeys(fallback_sequence))
@@ -470,31 +479,32 @@ st.sidebar.markdown("---")
 st.sidebar.info("📱 **Akses Lintas Perangkat**\nAplikasi siap dibuka melalui browser di Samsung S26 Ultra maupun TAB Huawei 12x.")
 
 # ATURAN EMAS SISTEM (GLOBAL MANDATORY RULES)
-COMMON_GOLDEN_RULES = """
+COMMON_GOLDEN_RULES = f"""
 # ATURAN EMAS PENULISAN ILMIAH (UNIVERSAL MANDATORY RULES)
 1. ZERO HALLUCINATION (NOL HALUSINASI): Dilarang keras membuat citasi fiktif, merubah data uji, atau mengarang referensi. Seluruh rujukan wajib nyata dan memiliki identitas DOI / ISBN / Metadata resmi.
-2. ATURAN KETAT JUDUL ARTIKEL:
+2. BATASAN TAHUN RUJUKAN MUTAKHIR: Seluruh rujukan buku dan jurnal WAJIB TERBIT DALAM 5 TAHUN TERAKHIR (Rentang Tahun: {START_YEAR} hingga {CURRENT_YEAR}). Dilarang menggunakan rujukan di bawah tahun {START_YEAR}.
+3. ATURAN KETAT JUDUL ARTIKEL:
    - Panjang Judul: MAKSIMAL 12 KATA (lugas, padat, berbobot).
    - Tanda Baca Terlarang: DILARANG KERAS menggunakan tanda titik dua (:).
    - Pembersihan Frasa: Buang frasa administratif/seremonial (seperti 'Laporan Pengabdian...', 'Proposal Hibah BIMA...').
-3. KETENTUAN ABSTRAK & KATA KUNCI:
+4. KETENTUAN ABSTRAK & KATA KUNCI:
    - Abstrak: 150 hingga 250 kata dalam 1 paragraf utuh (memuat latar belakang singkat, tujuan, metode, hasil utama, dan implikasi/novelty).
    - Kata Kunci (Keywords): Terdiri dari 3 hingga 5 kata kunci utama, WAJIB DISUSUN SECARA ALFABETIS (A-Z), dan dipisahkan tanda titik koma (;).
-4. KETENTUAN RUMUSAN MASALAH: Tepat menetapkan 2 Rumusan Masalah dalam bentuk kalimat tanya yang tajam dan fungsional.
-5. KETENTUAN BAB HASIL DAN PEMBAHASAN:
+5. KETENTUAN RUMUSAN MASALAH: Tepat menetapkan 2 Rumusan Masalah dalam bentuk kalimat tanya yang tajam dan fungsional.
+6. KETENTUAN BAB HASIL DAN PEMBAHASAN:
    - Bab Hasil: Sintesis fenomena/data uji dengan literatur. Sekurang-kurangnya terdapat 3 Sub-Sub Bab Kunci.
    - Bab Pembahasan: Kontribusi ilmiah sangat unik (Novelty) terkait kepakaran. Sekurang-kurangnya terdapat 3 Sub-Sub Bab Kunci.
    - Bagian Wajib (Limitation & Future Research): Wajib dicantumkan di akhir Bab Pembahasan untuk membuktikan posisi naskah sebagai extend atau challenge.
-6. LARANGAN STRUKTUR KALIMAT ANTITESIS AI: DILARANG KERAS menggunakan pola kalimat antitesis berulang seperti 'tidak hanya X, tetapi juga Y' atau 'ini bukan hanya... melainkan...'. Gunakan pernyataan langsung, ekspresif, dan alami (human-like).
-7. STRUKTUR DAFTAR PUSTAKA KATEGORIS (AKADEMIK HUKUM BAKU):
+7. LARANGAN STRUKTUR KALIMAT ANTITESIS AI: DILARANG KERAS menggunakan pola kalimat antitesis berulang seperti 'tidak hanya X, tetapi juga Y' atau 'ini bukan hanya... melainkan...'. Gunakan pernyataan langsung, ekspresif, dan alami (human-like).
+8. STRUKTUR DAFTAR PUSTAKA KATEGORIS (AKADEMIK HUKUM BAKU DI TAB 3):
    - Daftar Pustaka WAJIB dipisahkan menjadi 2 KELOMPOK SUB-JUDUL UTAMA:
      a. Buku / Monograf / Book Chapter
      b. Jurnal Ilmiah / Artikel Jurnal
-   - Setiap kelompok rujukan WAJIB DISUSUN SECARA ALFABETIS dari A sampai Z (A-Z) berformat APA Style 7th Edition.
-8. KOMPOSISI RUJUKAN HYBRID:
-   - Wajib menyerap minimal 8 RUJUKAN BUKU / BOOK CHAPTER / MONOGRAF resmi.
-   - Wajib menyerap minimal 15 hingga 20 ARTIKEL JURNAL resmi ber-DOI.
-9. MAKSIMAL PANJANG NASKAH: Keseluruhan draf naskah maksimal 4.000 kata (sudah termasuk Daftar Pustaka berformat APA Style 7th Edition).
+   - Setiap kelompok rujukan WAJIB DISUSUN SECARA ALFABETIS dari A sampai Z (A-Z) berformat APA Style 7th Edition (Hanya terbitan tahun {START_YEAR}-{CURRENT_YEAR}).
+9. KOMPOSISI RUJUKAN HYBRID (TAB 3):
+   - Wajib menyerap minimal 8 RUJUKAN BUKU / BOOK CHAPTER / MONOGRAF resmi (terbitan {START_YEAR}-{CURRENT_YEAR}).
+   - Wajib menyerap minimal 15 hingga 20 ARTIKEL JURNAL resmi ber-DOI (terbitan {START_YEAR}-{CURRENT_YEAR}).
+10. MAKSIMAL PANJANG NASKAH: Keseluruhan draf naskah maksimal 4.000 kata (sudah termasuk Daftar Pustaka berformat APA Style 7th Edition).
 """
 
 if domain_mode == "Mode Hukum (Utama)":
@@ -519,7 +529,7 @@ else:
 
 active_proj_display = st.session_state['project_name'] if st.session_state['project_name'] else "Proyek Baru (Unsaved)"
 st.title("🏛️ Aplikasi Asisten Penulisan Artikel Ilmiah & Revisi Jurnal")
-st.info(f"📌 **Proyek Aktif:** `{active_proj_display}` | **Status Sistem:** `{domain_mode}` ({sub_discipline})")
+st.info(f"📌 **Proyek Aktif:** `{active_proj_display}` | **Status Sistem:** `{domain_mode}` ({sub_discipline}) | **Rentang Rujukan:** `{START_YEAR}–{CURRENT_YEAR}`")
 
 if not api_key:
     st.warning("⚠️ Kunci API belum terdeteksi pada Secrets sistem.")
@@ -667,7 +677,7 @@ with tab1:
                             - Judul Artikel (Maksimal 12 kata, tanpa titik dua)
                             - Metodologi / Pendekatan Riset
                             - Gap Research / Analisis Dampak Permasalahan
-                            - 5 SOTA Rujukan Pendukung (APA Style 7th Edition)
+                            - 5 SOTA Rujukan Pendukung (APA Style 7th Edition, 5 tahun terakhir: {START_YEAR}-{CURRENT_YEAR})
                             - Novelty (Kontribusi ilmiah paling unik)
                             """
                             response = generate_content_with_retry(
@@ -689,7 +699,7 @@ with tab1:
         st.subheader("📊 Hasil Matriks Sintesis & Rekomendasi Judul")
         st.markdown(st.session_state['synthesis_result'])
 
-# TAB 2: DATA RISET & OUTLINE
+# TAB 2: DATA RISET & OUTLINE (BERFOKUS PADA KERANGKA PENULISAN TANPA DAFTAR PUSTAKA)
 with tab2:
     st.header("Klasifikasi Metodologi & Penyusunan Outline")
     
@@ -726,7 +736,7 @@ with tab2:
                 Pilihan Pengguna: {opsi_judul}
                 Data Tambahan: {data_input_field if data_input_field else 'Tidak ada (Pendekatan Teoretis/Kualitatif)'}
                 
-                Tugas: Hasilkan Outline Naskah Terstruktur yang WAJIB MEMATUHI ATURAN AKADEMIS berikut:
+                Tugas: Hasilkan Outline Naskah Terstruktur yang WAJIB MEMATUHI ATURAN AKADEMIS berikut (DILARANG MENYERTAKAN DAFTAR PUSTAKA PADA OUTLINE):
                 - Judul: Maksimal 12 kata, TANPA tanda titik dua (:).
                 - Abstrak: Draf kerangka abstrak 150 - 250 kata dalam 1 paragraf utuh.
                 - Kata Kunci (Keywords): 3 hingga 5 kata kunci utama, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
@@ -737,7 +747,8 @@ with tab2:
                     * Sub-Bab Pembahasan: Sekurang-kurangnya 3 Sub-Sub Bab Kunci (Novelty).
                     * Bagian Wajib: Limitation & Future Research.
                 - D. Kesimpulan (Menjawab 2 rumusan masalah secara langsung).
-                - E. Daftar Pustaka (Wajib dikelompokkan: Buku A-Z dan Jurnal A-Z berformat APA Style 7th Edition).
+                
+                catatan: DILARANG MENAMPILKAN BAGIAN DAFTAR PUSTAKA PADA OUTLINE. DAFTAR PUSTAKA HANYA DIPROSES PADA TAB 3.
                 """
                 response = generate_content_with_retry(
                     client,
@@ -765,19 +776,19 @@ with tab2:
                 st.session_state['outline_result'] = response.text
                 st.rerun()
 
-# TAB 3: DRAF NASKAH & EKSPOR DOCX (KATEGORISASI DAFTAR PUSTAKA A-Z)
+# TAB 3: DRAF NASKAH & EKSPOR DOCX (KATEGORISASI DAFTAR PUSTAKA A-Z & RENTANG 5 TAHUN)
 with tab3:
     st.header("Penulisan Draf Naskah Lengkap & Ekspor")
     
     if not st.session_state['outline_result']:
         st.warning("🔒 **Tahap Terkunci.** Silakan selesaikan dan setujui Outline pada Tab 2 terlebih dahulu.")
     else:
-        st.success("Outline disetujui. Siap menyusun draf naskah dengan rujukan Hybrid & Daftar Pustaka Kategori A-Z.")
+        st.success(f"Outline disetujui. Siap menyusun draf naskah dengan rujukan Hybrid ({START_YEAR}–{CURRENT_YEAR}) & Daftar Pustaka Terkategori.")
         
         if st.button("✍️ Generasi Draf Naskah Lengkap (Maksimal 4.000 Kata)"):
             outline_text = st.session_state['outline_result']
             
-            with st.spinner("🔍 Menghubungi Crossref, OpenAlex, dan Google Books API untuk menarik rujukan BUKU & JURNAL mutakhir..."):
+            with st.spinner(f"🔍 Menghubungi Crossref, OpenAlex, dan Google Books API (Filter Terbitan {START_YEAR}–{CURRENT_YEAR})..."):
                 journals = fetch_crossref_journals(outline_text[:150], limit=20)
                 openalex_bks = fetch_openalex_books(outline_text[:150], limit=5)
                 gbooks = fetch_google_books(outline_text[:150], limit=5)
@@ -787,11 +798,11 @@ with tab3:
                 st.session_state['hybrid_citations'] = all_citations
                 
                 formatted_refs_str = ""
-                formatted_refs_str += "=== KATEGORI RUJUKAN BUKU / MONOGRAF / BOOK CHAPTER (MINIMAL 8) ===\n"
+                formatted_refs_str += f"=== KATEGORI RUJUKAN BUKU / MONOGRAF / BOOK CHAPTER (MINIMAL 8 TERBITAN {START_YEAR}-{CURRENT_YEAR}) ===\n"
                 for b in all_books:
                     formatted_refs_str += f"- [BUKU] {b['apa']}\n"
                     
-                formatted_refs_str += "\n=== KATEGORI RUJUKAN ARTIKEL JURNAL DOI (MINIMAL 15-20) ===\n"
+                formatted_refs_str += f"\n=== KATEGORI RUJUKAN ARTIKEL JURNAL DOI (MINIMAL 15-20 TERBITAN {START_YEAR}-{CURRENT_YEAR}) ===\n"
                 for j in journals:
                     formatted_refs_str += f"- [JURNAL] {j['apa']}\n"
 
@@ -800,7 +811,7 @@ with tab3:
                 Susun naskah artikel ilmiah lengkap secara utuh dan terstruktur berdasarkan Outline berikut:
                 {outline_text}
                 
-                DAFTAR RUJUKAN RESMI HYBRID (WAJIB DISERAP SECARA KONTEKSTUAL KE PARAGRAF NASKAH):
+                DAFTAR RUJUKAN RESMI HYBRID TERBITAN {START_YEAR}–{CURRENT_YEAR} (WAJIB DISERAP SECARA KONTEKSTUAL KE PARAGRAF NASKAH):
                 {formatted_refs_str}
                 
                 PETUNJUK KETAT PENULISAN NASKAH LENGKAP & DAFTAR PUSTAKA:
@@ -808,7 +819,7 @@ with tab3:
                 2. Abstrak: Presisi 150 - 250 kata dalam 1 paragraf utuh.
                 3. Kata Kunci (Keywords): 3 - 5 kata kunci, WAJIB ALFABETIS (A-Z), dipisah tanda titik koma (;).
                 4. Panjang Naskah: Maksimal 4.000 kata komprehensif.
-                5. PENGGUNAAN SITASI HYBRID: Wajib menyerap MINIMAL 8 BUKU/MONOGRAF dan 15-20 ARTIKEL JURNAL di atas ke dalam paragraf yang relevan secara kontekstual.
+                5. PENGGUNAAN SITASI HYBRID: Wajib menyerap MINIMAL 8 BUKU/MONOGRAF dan 15-20 ARTIKEL JURNAL di atas (hanya terbitan {START_YEAR}-{CURRENT_YEAR}) ke dalam paragraf yang relevan secara kontekstual.
                 6. Bahasa Akademis Formal Human-Like. DILARANG STRUKTUR ANTITESIS ('tidak hanya X tapi Y').
                 7. Tepat menjawab 2 Rumusan Masalah.
                 8. Bab Hasil (3 Sub-Sub Bab) & Bab Pembahasan (3 Sub-Sub Bab + Limitation & Future Research).
@@ -817,10 +828,10 @@ with tab3:
                    E. Daftar Pustaka
                    
                    Buku / Monograf / Book Chapter
-                   [Daftar seluruh rujukan buku disajikan secara terurut alfabetis dari A sampai Z, format APA Style 7th]
+                   [Daftar seluruh rujukan buku terbitan {START_YEAR}-{CURRENT_YEAR} disajikan secara terurut alfabetis dari A sampai Z, format APA Style 7th]
                    
                    Jurnal Ilmiah / Artikel Jurnal
-                   [Daftar seluruh rujukan artikel jurnal disajikan secara terurut alfabetis dari A sampai Z, format APA Style 7th dengan DOI]
+                   [Daftar seluruh rujukan artikel jurnal terbitan {START_YEAR}-{CURRENT_YEAR} disajikan secara terurut alfabetis dari A sampai Z, format APA Style 7th dengan DOI]
                 """
                 
                 response = generate_content_with_retry(
@@ -842,7 +853,7 @@ with tab3:
         draft_comment = st.text_input("Catatan / Komentar Penyesuaian Draf:", placeholder="Misal: Tambahkan analisis perbandingan pada Bab Pembahasan dan perbanyak sitasi buku filsafat...")
         if st.button("🔄 Perbarui Draf Naskah Sesuai Catatan"):
             with st.spinner("Memperbarui dan merevisi draf naskah secara akademis..."):
-                prompt_refine_draft = f"""Berikut Draf Naskah saat ini:\n{st.session_state['draft_result']}\n\nCatatan Tambahan Penulis:\n{draft_comment}\n\nTolong perbarui draf naskah tersebut secara komprehensif dengan tetap mematuhi Aturan Emas dan menyusun Daftar Pustaka terpisah (Buku A-Z & Jurnal A-Z) dalam format APA Style 7th Edition."""
+                prompt_refine_draft = f"""Berikut Draf Naskah saat ini:\n{st.session_state['draft_result']}\n\nCatatan Tambahan Penulis:\n{draft_comment}\n\nTolong perbarui draf naskah tersebut secara komprehensif dengan tetap mematuhi Aturan Emas dan menyusun Daftar Pustaka terpisah (Buku A-Z & Jurnal A-Z terbitan {START_YEAR}-{CURRENT_YEAR}) dalam format APA Style 7th Edition."""
                 response_refine_draft = generate_content_with_retry(
                     client,
                     selected_model,
@@ -963,7 +974,7 @@ with tab4:
 # TAB 5: EKSPOR SITASI RIS (MENDELEY / ZOTERO)
 with tab5:
     st.header("📚 Ekspor Sitasi RIS ke Mendeley / Zotero")
-    st.markdown("Tab ini secara otomatis mengonversi seluruh rujukan **Buku, Monograf, dan Artikel Jurnal** dari Crossref, OpenAlex, dan Google Books menjadi berkas **`.ris`** siap pakai.")
+    st.markdown(f"Tab ini secara otomatis mengonversi seluruh rujukan **Buku, Monograf, dan Artikel Jurnal** (Terbitan {START_YEAR}–{CURRENT_YEAR}) dari Crossref, OpenAlex, dan Google Books menjadi berkas **`.ris`** siap pakai.")
     
     if st.session_state['hybrid_citations']:
         st.success(f"Terdeteksi **{len(st.session_state['hybrid_citations'])} rujukan resmi (Buku & Jurnal)** dari draf naskah saat ini.")
