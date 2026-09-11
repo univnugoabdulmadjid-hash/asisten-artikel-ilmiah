@@ -26,6 +26,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# PATH LOKAL REPOSITORY MEMORI LAPTOP YOGA
+LOCAL_REPO_PATH = r"D:\KAMPUS UNUGO\02. TRIDHARMA PT\01. PUBLIKASI KARYA\01.ARTIKEL\01_memory_repository_webapp_madjid"
+
 # HELPER KONVERSI MARKDOWN KE DOCX
 def markdown_to_docx(md_text):
     doc = Document()
@@ -88,9 +91,9 @@ def fetch_crossref_citations(query_topic, limit=20):
                     family = a.get('family', '')
                     given = a.get('given', '')
                     if family:
-                        author_list.append(f"{family}, {given[0] if given else ''}.".strip())
+                        author_list.append({'family': family, 'given': given, 'formatted': f"{family}, {given[0] if given else ''}.".strip()})
                 
-                authors_str = ", ".join(author_list) if author_list else "Anonim"
+                authors_str = ", ".join([a['formatted'] for a in author_list]) if author_list else "Anonim"
                 
                 pub_date = item.get('published-print') or item.get('published-online') or {}
                 date_parts = pub_date.get('date-parts', [[None]])[0]
@@ -111,14 +114,42 @@ def fetch_crossref_citations(query_topic, limit=20):
                     
                     citations.append({
                         'apa': ref_apa,
-                        'doi': f"https://doi.org/{doi}",
-                        'authors': authors_str,
+                        'doi': doi,
+                        'authors': author_list,
+                        'authors_str': authors_str,
                         'year': year,
-                        'title': title
+                        'title': title,
+                        'journal': journal,
+                        'volume': volume,
+                        'issue': issue
                     })
             return citations[:20]
     except Exception as e:
         return []
+
+# HELPER KONVERSI SITASI KE KODE RIS (MENDELEY / ZOTERO)
+def convert_citations_to_ris(citations):
+    ris_output = ""
+    for item in citations:
+        ris_output += "TY  - JOUR\n"
+        if isinstance(item, dict) and 'title' in item:
+            ris_output += f"TI  - {item.get('title', '')}\n"
+            if item.get('journal'):
+                ris_output += f"JO  - {item.get('journal')}\n"
+            if item.get('year'):
+                ris_output += f"PY  - {item.get('year')}\n"
+            if item.get('volume'):
+                ris_output += f"VL  - {item.get('volume')}\n"
+            if item.get('issue'):
+                ris_output += f"IS  - {item.get('issue')}\n"
+            if item.get('doi'):
+                ris_output += f"DO  - {item.get('doi')}\n"
+                ris_output += f"UR  - https://doi.org/{item.get('doi')}\n"
+            for auth in item.get('authors', []):
+                if isinstance(auth, dict):
+                    ris_output += f"AU  - {auth.get('family', '')}, {auth.get('given', '')}\n"
+        ris_output += "ER  - \n\n"
+    return ris_output
 
 # HELPER PENYANGGA OTOMATIS (AUTO RETRY & MODEL FALLBACK)
 def generate_content_with_retry(client, primary_model, contents):
@@ -151,7 +182,7 @@ st.sidebar.title("⚙️ Pengaturan Sistem")
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
 
-for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix']:
+for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'crossref_citations', 'project_name']:
     if key not in st.session_state:
         st.session_state[key] = None
 
@@ -189,21 +220,47 @@ selected_model = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.subheader("💾 Manajemen Proyek Riset")
 
+# Penamaan Proyek Mandiri
+project_name_input = st.sidebar.text_input("Nama Proyek / Artikel:", value=st.session_state['project_name'] or "Artikel_Hukum_HAN")
+st.session_state['project_name'] = project_name_input
+
+# Tombol Proyek Baru (Reset Canvas)
+if st.sidebar.button("➕ Mulai Proyek Baru (Bersihkan Sesi)"):
+    for key in ['synthesis_result', 'outline_result', 'draft_result', 'revision_matrix', 'crossref_citations', 'project_name']:
+        st.session_state[key] = None
+    st.sidebar.success("Sesi berhasil dibersihkan. Siap untuk proyek baru!")
+    st.rerun()
+
 # Fitur Simpan Proyek (.json)
 project_export_data = {
+    'project_name': st.session_state['project_name'],
     'synthesis_result': st.session_state['synthesis_result'],
     'outline_result': st.session_state['outline_result'],
     'draft_result': st.session_state['draft_result'],
-    'revision_matrix': st.session_state['revision_matrix']
+    'revision_matrix': st.session_state['revision_matrix'],
+    'crossref_citations': st.session_state['crossref_citations']
 }
 json_project_str = json.dumps(project_export_data, indent=2)
 
+clean_proj_filename = re.sub(r'[^\w\s-]', '', st.session_state['project_name']).strip().replace(' ', '_')
+
+# Deteksi Otomatis Folder Lokal Laptop Yoga
+if os.path.exists(LOCAL_REPO_PATH):
+    if st.sidebar.button("💾 Auto-Save ke Folder Laptop Yoga"):
+        try:
+            target_file_path = os.path.join(LOCAL_REPO_PATH, f"{clean_proj_filename}_Session.json")
+            with open(target_file_path, "w", encoding="utf-8") as f:
+                f.write(json_project_str)
+            st.sidebar.success(f"✅ Otomatis tersimpan di:\n`01_memory_repository_webapp_madjid`")
+        except Exception as e:
+            st.sidebar.error(f"Gagal menyimpan ke folder lokal: {e}")
+
 st.sidebar.download_button(
-    label="💾 Simpan Sesi Proyek (.json)",
+    label="📥 Unduh Sesi Proyek (.json)",
     data=json_project_str,
-    file_name="Proyek_Riset_Akademis.json",
+    file_name=f"{clean_proj_filename}_Session.json",
     mime="application/json",
-    help="Unduh berkas proyek untuk melanjutkan pekerjaan kapan saja."
+    help="Unduh berkas proyek untuk disimpan di folder lokal Anda."
 )
 
 # Fitur Muat Proyek (.json)
@@ -212,10 +269,12 @@ if uploaded_project is not None:
     if st.sidebar.button("📥 Pulihkan Pekerjaan"):
         try:
             loaded_data = json.load(uploaded_project)
+            st.session_state['project_name'] = loaded_data.get('project_name')
             st.session_state['synthesis_result'] = loaded_data.get('synthesis_result')
             st.session_state['outline_result'] = loaded_data.get('outline_result')
             st.session_state['draft_result'] = loaded_data.get('draft_result')
             st.session_state['revision_matrix'] = loaded_data.get('revision_matrix')
+            st.session_state['crossref_citations'] = loaded_data.get('crossref_citations')
             st.sidebar.success("✅ Proyek berhasil dipulihkan!")
             st.rerun()
         except Exception as e:
@@ -301,7 +360,7 @@ else:
     """
 
 st.title("🏛️ Aplikasi Asisten Penulisan Artikel Ilmiah & Revisi Jurnal")
-st.caption(f"Status Sistem: **{domain_mode}** ({sub_discipline}) | Integrasi Gemini API & Crossref REST API")
+st.caption(f"Status Sistem: **{domain_mode}** ({sub_discipline}) | Proyek: **{st.session_state['project_name']}**")
 
 if not api_key:
     st.warning("⚠️ Kunci API belum terdeteksi pada Secrets sistem.")
@@ -313,12 +372,13 @@ except Exception as e:
     st.error(f"Gagal menginisialisasi API Key: {e}")
     st.stop()
 
-# 3. NAVIGASI ALUR KERJA SEKUANSIAL (TABS)
-tab1, tab2, tab3, tab4 = st.tabs([
+# 3. NAVIGASI ALUR KERJA SEKUANSIAL (5 TABS)
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "1️⃣ Fitur 1-3: Sintesis & SOTA", 
     "2️⃣ Fitur 4-5: Data Riset & Outline", 
     "3️⃣ Fitur 6-7: Draf Naskah & Ekspor",
-    "4️⃣ Asisten Revisi Jurnal (Peer Review)"
+    "4️⃣ Asisten Revisi Jurnal (Peer Review)",
+    "5️⃣ Ekspor Sitasi RIS (Mendeley)"
 ])
 
 # TAB 1: SINTESIS LITERATUR & SOTA
@@ -561,6 +621,7 @@ with tab3:
                 
                 # Tarik 15-20 Sitasi Real-Time dari Crossref API
                 crossref_refs = fetch_crossref_citations(outline_text[:200], limit=20)
+                st.session_state['crossref_citations'] = crossref_refs
                 
                 formatted_crossref_text = "\n".join([f"- {r['apa']}" for r in crossref_refs]) if crossref_refs else "Menggunakan rujukan standar dari dokumen utama."
                 
@@ -605,7 +666,7 @@ with tab3:
         st.download_button(
             label="📘 Unduh Naskah (.docx / Microsoft Word)",
             data=docx_file,
-            file_name="Draf_Artikel_Ilmiah_Lengkap.docx",
+            file_name=f"Draf_{clean_proj_filename}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
 
@@ -705,6 +766,30 @@ with tab4:
         st.download_button(
             label="📘 Unduh Matriks & Naskah Revisi (.docx / Word)",
             data=docx_rev,
-            file_name="Matriks_Tanggapan_dan_Naskah_Revisi_Jurnal.docx",
+            file_name=f"Revisi_{clean_proj_filename}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
+
+# TAB 5: EKSPOR SITASI RIS (MENDELEY / ZOTERO)
+with tab5:
+    st.header("📚 Ekspor Sitasi RIS ke Mendeley / Zotero")
+    st.markdown("Tab ini secara otomatis mengonversi seluruh daftar rujukan artikel dari Crossref API yang digunakan dalam Draf Naskah menjadi berkas **`.ris`** siap pakai.")
+    
+    if st.session_state['crossref_citations']:
+        st.success(f"Terdeteksi **{len(st.session_state['crossref_citations'])} rujukan resmi Crossref API** dari draf naskah saat ini.")
+        
+        ris_data_string = convert_citations_to_ris(st.session_state['crossref_citations'])
+        
+        st.subheader("📑 Pratinjau Teks Kode RIS:")
+        st.code(ris_data_string[:1000] + ("\n..." if len(ris_data_string) > 1000 else ""), language="text")
+        
+        st.markdown("---")
+        st.download_button(
+            label="📥 Unduh Berkas Sitasi (.ris) untuk Mendeley",
+            data=ris_data_string,
+            file_name=f"Sitasi_{clean_proj_filename}.ris",
+            mime="application/x-research-info-systems",
+            help="Impor berkas ini ke Mendeley: Add New -> Import Library -> RIS (.ris)"
+        )
+    else:
+        st.info("💡 Belum ada data sitasi Crossref API. Silakan jalankan tombol **Generasi Draf Naskah Lengkap** di Tab 3 terlebih dahulu.")
